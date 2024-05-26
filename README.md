@@ -1,2 +1,7 @@
-# serializegl
-fun library for opengl
+# Serialize
+Arbitrary type serialization library
+
+#*INCOMPLETE*
+
+
+
