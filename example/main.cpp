@@ -19,6 +19,7 @@ int main(){
   letter_node.put_string<char>("abcd",5,"letters");
   
   std::cout << "compat string letters: "
+    
             << letter_node.compat_string<char>("letters") <<"\n";
   std::cout << "compat string noex: "
             << letter_node.compat_string<char>("nonex") << "\n";

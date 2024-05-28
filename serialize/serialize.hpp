@@ -3,6 +3,14 @@
 #include <string>
 #include <cstring>
 
+bool SystemBigEndian(void){
+    union {
+        uint32_t i;
+        char c[4];
+    } int = {0x01020304};
+
+    return int.c[0] == 1;
+}
 
 class SizedBlock{
 public:
@@ -19,6 +27,27 @@ public:
     data = malloc(block->size);
     memcpy(data, block->data, block->size);
     size = block->size;
+  }
+
+  void ReverseEndian(size_t span){
+    if(size % span){
+      #ifndef SERIALIZE_NOWARN
+      std::cout << "Serialize: WARN: Cannot reverse endian of size "
+                << size
+                << " and span"
+                << span
+                <<". Size must be a multiple of span."
+      #endif
+      return; 
+    }
+    unsigned char* bytes = (unsigned char*)data;
+    for (i = 0; i < size; i += span){
+      for (a = 0; a < (span>>1); a++){
+        unsigned char t = bytes[i + a];
+        bytes[i + a] = bytes[i + (span-a)];
+        bytes[i + (span-a)] = t;
+      }
+    }
   }
 
   SizedBlock(){
