@@ -21,6 +21,7 @@ public:
   
   SizedBlock(size_t size_bytes,const void* input){
     data = malloc(size);
+    data_reverse_endian = malloc(size);
     size = size_bytes;
     memcpy(data,input,size_bytes);
   }
@@ -76,22 +77,20 @@ public:
   template<typename T>
   void put(T* data, std::string name){
     tags[name] = new SizedBlock(sizeof(T), data);
+    tags[name]->ReverseEndian(sizeof(T));
   }
 
   template<typename T, bool EndianSensitive>
   void put(T data, std::string name){
     T a = data;
     tags[name] = new SizedBlock(sizeof(T), &a);
-    if(SystemBigEndian() && EndianSensitive)
-      tags[name]->ReverseEndian(sizeof(T));
+    tags[name]->ReverseEndian(sizeof(T));
   }
 
   template<typename T, bool EndianSensitive>
   void put_string(const T* data, size_t amount, std::string name){
     tags[name] = new SizedBlock(sizeof(T)*amount, data);
-    if(SystemBigEndian() && EndianSensitive){
-      tags[name]->ReverseEndian(sizeof(T));
-    }
+    tags[name]->ReverseEndian(sizeof(T));
   }
 
   void put_node(CompoundNode* node, std::string name){
