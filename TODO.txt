@@ -1,0 +1,2 @@
+Make Endianness-sensitive
+Actually create serialization
