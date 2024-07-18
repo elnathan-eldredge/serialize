@@ -66,7 +66,7 @@ int main(){
 
   node.get_node_list("child array")[0]->put_string<char>("letters", 8, "opqrstu");
 
-  node.put_string<char>(":\\:use tokens in key test {}[],\'\":\\:", 5, ":\\4{}[],:\\:");
+  node.put_string<char>(":\\:use tokens in key test {}[],\'\":\\:", 12, ":\\4{}[],:\\:");
 
   printf("node has tag list \"child array\" : %s\n", node.has_tag_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
