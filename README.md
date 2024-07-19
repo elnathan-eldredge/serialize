@@ -16,8 +16,8 @@ The STL library
 
 ## LIMITATIONS
 
-Individual elements in string elements have a max size of 255 bytes
-Individual elements (non-nested elements) have a max size of 4,294,967,295 bytes
+Individual elements in string elements have a max size of 255 bytes. 
+Individual elements (non-nested elements) have a max size of 4,294,967,295 bytes. 
 Serializations temporarily reserve 8kb per nested element during serialization. Compile with SERIALIZE_NORESERVE defined to disable.
 
 ## Available utilities intended for use by the programmer
