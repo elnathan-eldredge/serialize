@@ -16,7 +16,7 @@ The STL library
 
 ## LIMITATIONS
 
-Individual elements in tag elements have a maximum size of 65535 bytes. 
+Individual elements in tag elements have a maximum size of 65,535 bytes. 
 Individual tags have a maximum size of 4,294,967,295 bytes. 
 Serializations temporarily reserve 8kb per nested element during serialization. Compile with SERIALIZE_NORESERVE defined to disable.
 
