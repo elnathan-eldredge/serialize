@@ -9,6 +9,16 @@
 //only for this file, so things don't crash for 32-bit systems
 #define size_t uint32_t
 
+#define COMPOUND_NODE_BEGIN_FLAG (char)123
+#define COMPOUND_NODE_END_FLAG (char)125
+#define COMPOUND_NODE_BEGIN_STRING_FLAG (char)44
+#define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)58
+#define COMPOUND_NODE_BEGIN_LIST_FLAG (char)91
+#define COMPOUND_NODE_END_LIST_FLAG (char)93
+
+#define serialize Serialize
+#define compound_node CompoundNode
+
 namespace Serialize{
 
   bool is_big_endian(void){
@@ -130,13 +140,6 @@ namespace Serialize{
     void destroy_children();
   };
 
-#define COMPOUND_NODE_BEGIN_FLAG (char)123
-#define COMPOUND_NODE_END_FLAG (char)125
-#define COMPOUND_NODE_BEGIN_STRING_FLAG (char)44
-#define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)58
-#define COMPOUND_NODE_BEGIN_LIST_FLAG (char)91
-#define COMPOUND_NODE_END_LIST_FLAG (char)93
-
   void _skip_to_flag(char flag, std::vector<char>* data, size_t* index, size_t offset){
     *index -= 1;
     while((*data)[++*index] != flag && (*index) < data->size()){}
@@ -256,7 +259,9 @@ namespace Serialize{
 
   std::vector<char> CompoundNode::serialize(){
     std::vector<char> data;
+#ifndef SERIALIZE_NORESERVE
     data.reserve(8192);
+#endif
     data.push_back(COMPOUND_NODE_BEGIN_FLAG);
     for(std::pair<std::string, SizedBlock*> pair : generic_tags){
       std::string escaped = _add_escapes_to_string(pair.first);

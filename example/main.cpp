@@ -12,7 +12,7 @@ int main(){
   uint64_t number = 0x123456789abcdef;
 
   //the first argument is the size of the elements, and the second is the amount.
-  Serialize::SizedBlock block = Serialize::SizedBlock(sizeof(uint32_t), 2, &number);
+  serialize::SizedBlock block = Serialize::SizedBlock(sizeof(uint32_t), 2, &number);
 
   //this function returns the serialized data, safe to write to disk
   std::vector<char> disk = block.lower();
@@ -37,7 +37,7 @@ int main(){
   
   printf("##########################\nCompoundNode tests\n##########################\n");
 
-  Serialize::CompoundNode node;
+  Serialize::compound_node node;
 
   node.put<uint64_t>("number64", number);
   node.put_string<char>("some string", 28, "this is a string of letters");
@@ -63,10 +63,8 @@ int main(){
   node.put_back("child array", &child_node);
   node.put_back("child array", &child_node);
   node.put_back("child array", &child_node);
-
   node.get_node_list("child array")[0]->put_string<char>("letters", 8, "opqrstu");
-
-  node.put_string<char>(":\\:use tokens in key test {}[],\'\":\\:", 12, ":\\4{}[],:\\:");
+  node.put_string<char>("reserved escapes can be used as well :\\{}[],", 12, ":\\4{}[],:\\:");
 
   printf("node has tag list \"child array\" : %s\n", node.has_tag_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
@@ -90,6 +88,6 @@ int main(){
   printf("deserialized json representaion: \n%s\n", node.similair_json().c_str());
   if(node.has_compat<uint64_t>("number64"))
      printf("node.number64: %lx\n\n", node.get<uint64_t>("number64"));
-  printf("PLEASE NOTE: the json representaion will display the pointer adress in some cases instead of the content (because types are arbritrary), so the json representaions may not match. It is recommended to compare data structures algorithmically or by comparing a reserialization of the deserialized node\n");
+  printf("PLEASE NOTE: the json representaion will display the pointer adress in some cases instead of the content (because types are arbritrary), so the json representaions may not match. It is recommended to compare data structures algorithmically or by comparing a reserialization of the deserialized node (given the order is preserved)\n");
   return 0;
 }
