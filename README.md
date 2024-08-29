@@ -147,6 +147,10 @@ Initialize the node as the data structure expressed in the block. The end index 
 
 Destroy the node and the child data structure.
 
+#### bool operator [];
+
+Returns wether there is a child or tag of the name
+
 ### Other
 
 There are other public types and methods for internal use.

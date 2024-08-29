@@ -133,6 +133,8 @@ namespace Serialize{
 
     std::vector<char> serialize();
 
+    bool operator[](std::string key);
+
     bool deserialize(std::vector<char>* data, size_t start_index, size_t* end_index);
     
     ~CompoundNode();
@@ -175,6 +177,11 @@ namespace Serialize{
     if(start_index != nullptr) *start_index = index;
     return str;
   }
+
+  bool CompoundNode::operator[](std::string key){
+    return (exists_key<SizedBlock*>(&generic_tags, key) || exists_key<CompoundNode*>(&child_nodes, key));
+  }
+  
   
   bool CompoundNode::deserialize(std::vector<char>* data, size_t start_index, size_t* end_index){
     CompoundNode new_node;

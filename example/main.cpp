@@ -43,7 +43,9 @@ int main(){
   node.put_string<char>("some string", 28, "this is a string of letters");
   node.put_string<char>("some string2", 29, "this is a string of letters2");
 
-  printf("node has member \"number64\" : %s\n", node.has_compat<uint64_t>("number64")?"true":"false");
+  printf("node has unsigned long \"number64\" : %s\n", node.has_compat<uint64_t>("number64")?"true":"false");
+  printf("node has int \"number64\" : %s\n", node.has_compat<int>("number64")?"true":"false");
+  printf("node has member \"number64\" : %s\n", node["number64"]?"true":"false");
   
   Serialize::CompoundNode child_node;
   child_node.put_string<char>("letters", 8, "abcdefg");
@@ -53,6 +55,7 @@ int main(){
   node.put("child", &child_node); //makes a copy
 
   printf("node has child \"child\": %s\n", node.has_tag("child")?"true":"false");
+  printf("node has member \"child\": %s\n", node["child"]?"true":"false");
   printf("changing nodes's child's tag \"letters\", using overriding function\n");
 
   node.get_node("child")->put_string<char>("letters", 8, "higklmn");
