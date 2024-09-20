@@ -39,7 +39,8 @@ int main(){
 
   Serialize::compound_node node;
 
-  node.put<uint64_t>("number64", number);
+  node.put<float>("float",5.196152423)->assign_meta(COMPOUND_NODE_BEGIN_LIST_FLAG);
+  node.put<uint64_t>("number64",number);  
   node.put_string<char>("some string", 28, "this is a string of letters");
   node.put_string<char>("some string2", 29, "this is a string of letters2");
 
@@ -72,7 +73,8 @@ int main(){
   printf("node has tag list \"child array\" : %s\n", node.has_tag_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
   printf("json representation: \n%s\n", node.similair_json().c_str());
-  printf("node.number64: %lx\n\n", node.get<uint64_t>("number64"));
+  printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
+  printf("node.float: %f\n\n", node.get<float>("float"));
 
   std::vector<char> serialized = node.serialize();
 
@@ -83,6 +85,10 @@ int main(){
   }
   printf("\n\n");
 
+  std::string serialized_encoded = node.serialize_encode();
+
+  printf("serialized encoded contents: %s\n\n", serialized_encoded.c_str());
+
   node.destroy_children();
 
   if(!node.deserialize(&serialized, 0, nullptr))
@@ -90,7 +96,21 @@ int main(){
 
   printf("deserialized json representaion: \n%s\n", node.similair_json().c_str());
   if(node.has_compat<uint64_t>("number64"))
-     printf("node.number64: %lx\n\n", node.get<uint64_t>("number64"));
-  printf("PLEASE NOTE: the json representaion will display the pointer adress in some cases instead of the content (because types are arbritrary), so the json representaions may not match. It is recommended to compare data structures algorithmically or by comparing a reserialization of the deserialized node (given the order is preserved)\n");
+     printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
+  if(node.has_compat<float>("float"))
+    printf("node.floatf: %f\n\n", node.get<float>("float"));
+
+  node.destroy_children();
+  
+  if(!node.decode_deserialize(serialized_encoded))
+    puts("cannot deserialize decode node");
+
+  printf("decoded deserialized: \n%s\n", node.similair_json().c_str());
+  if(node.has_compat<uint64_t>("number64"))
+    printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
+  if(node.has_compat<float>("float"))
+    printf("node.floatf: %f\n\n", node.get<float>("float"));
+
+    printf("PLEASE NOTE: the json representaion will display the pointer adress in some cases instead of the content (because types are arbritrary), so the json representaions may not match. It is recommended to compare data structures algorithmically or by comparing a reserialization of the deserialized node (given the order is preserved)\n\n");
   return 0;
 }
