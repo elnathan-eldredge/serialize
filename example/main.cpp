@@ -6,7 +6,7 @@ int main(){
 
   printf("##########################\nSizedBlock tests\n##########################\n");
 
-  //although it is not intended to use sizedblocks directly, it can be done. for testing, a 64-bit number will be stored as 2 32-bit numbers, although it is recommended to store as 1 64-bit
+  //although it is not intended to use sizedblocks directly, it can be done. for testing, a 64-bit number will be stored as 2 32-bit numbers.
   printf("serialize uint64_t as 2 uint32_t\n\n");
   
   uint64_t number = 0x123456789abcdef;
@@ -59,6 +59,8 @@ int main(){
       ->assign_meta(SB_META_INT_STYLE);
   node.put_string<bool>("some booleans", (2 * sizeof(uint64_t)) / sizeof(bool), (bool *)sixteenchars)
     ->assign_meta(SB_META_BOOLEAN);
+
+  printf("\n Node evaluation\n\n");
   
   printf("node has unsigned long \"number64\" : %s\n", node.has_compat<uint64_t>("number64")?"true":"false");
   printf("node has int \"number64\" : %s\n", node.has_compat<int>("number64")?"true":"false");
@@ -90,13 +92,12 @@ int main(){
 
   printf("node has tag list \"child array\" : %s\n", node.has_tag_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
-  printf("json representation: \n%s\n", node.similair_json().c_str());
-  printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
-  printf("node.float: %f\n\n", node.get<double>("double"));
+
+  printf("\n Node Contents: \n\n%s\n",node.serialize_readable(false).c_str());
 
   std::vector<char> serialized = node.serialize();
 
-  printf("serialized contents: \n");
+  printf("\nSerialized contents (BSSF): \n\n");
   
   for(char character: serialized){
     putchar(character);
@@ -105,54 +106,43 @@ int main(){
 
   std::string serialized_encoded = node.serialize_encode();
 
-  printf("serialized encoded contents: %s\n\n", serialized_encoded.c_str());
+  printf("Serialized encoded contents (EBSSF):\n\n%s\n\n", serialized_encoded.c_str());
 
   node.destroy_children();
 
-  if(!node.deserialize(&serialized, 0, nullptr))
-    puts("unable to deserialize for some reason");
-
-  printf("deserialized json representaion: \n%s\n", node.similair_json().c_str());
-  if(node.has_compat<uint64_t>("number64"))
-     printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
-  if(node.has_compat<double>(""))
-    printf("node.floatf: %f\n\n", node.get<double>("double"));
-
+  if(!node.deserialize(&serialized, 0, nullptr)){
+    puts("unable to deserialize BSSF data\n");
+  } else {
+    printf("Deserialized: \n\n%s\n\n", node.serialize_readable(false).c_str());
+  }
+  
   node.destroy_children();
   
-  if(!node.decode_deserialize(serialized_encoded))
+  if(!node.decode_deserialize(serialized_encoded)){
     puts("cannot deserialize decode node");
-
-  printf("decoded deserialized: \n%s\n", node.similair_json().c_str());
-  if(node.has_compat<uint64_t>("number64"))
-    printf("node.number64: %lx\n", node.get<uint64_t>("number64"));
-  if(node.has_compat<double>("double"))
-    printf("node.floatf: %f\n\n", node.get<double>("double"));
-
-  printf(
-      "PLEASE NOTE: the json representaion will display the pointer adress in "
-      "some cases instead of the content (because types are arbritrary), so "
-      "the json representaions may not match. It is recommended to compare "
-      "data structures algorithmically or by comparing a reserialization of "
-      "the deserialized node (given the order is preserved)\n\n");
-
-  std::string sr = node.serialize_readable(false);
-  std::cout << "serialized readable:\n\n" << sr << "\n\n";
-  node.destroy_children();
-  if (node.deserialize_readable(sr)) {
-    std::cout << "from generated: \n\n" << node.serialize_readable(false) << "\n\n";
   } else {
-    std::cout << "failed to parse SJSON\n\n";
+    printf("Decoded deserialized: \n\n%s\n\n", node.serialize_readable(false).c_str());
   }
 
-  std::string code = "{\r\n"
-   "\"double\" : n[false]}";
+  std::string sr = node.serialize_readable(false);
+  node.destroy_children();
+  
+  if (node.deserialize_readable(sr)) {
+    printf("Reserialized code: \n\n%s\n\n", node.serialize_readable(false).c_str());
+  } else {
+    printf("cannot deserialize RSSF\n");
+  }
+
+  std::string invalid_code = "{\r\n"
+   "\"incomplete\" : n";
+
+  printf("About to decode invalid code\n\n");
 
   node.destroy_children();
-  if (node.deserialize_readable(code)) {
-    std::cout << "from raw data: \n\n" << node.serialize_readable(false) << "\n\n";
+  if (node.deserialize_readable(invalid_code)) {
+    printf("from invalid data (this shoud not happen): \n\n%s\n\n", node.serialize_readable(false).c_str());
   } else {
-    std::cout << "failed to parse SJSON\n\n";
+    printf("Cannot decode invalid RSSN\n");
   }
   
   return 0;
