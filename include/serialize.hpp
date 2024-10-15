@@ -1443,4 +1443,6 @@ namespace Serialize{
 
 }
 #undef un_size_t
-
+#undef _return_if_EOF
+#undef _rassert_token
+#undef bp
