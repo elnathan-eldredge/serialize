@@ -1,168 +1,224 @@
 # Serialize
 
-Arbitrary type serialization library
+Hashtable style serialization library
 
-## This library operates under the principals:
+## Design Goals:
 
-- Functions always have referenced value inputs as pointers
+- Serialize pseudostatically-typed Json-Like data structures
+- Serialize into packed binary
+- Serialize into string-compatible data
+- Serialize into human-readable notation
+- Compatible across endiannesses, two's complementnesses, and bitness
+- Compatible with all homogeneous data types
+
+## Current notices:
+
+- All referenced values are passed as a pointer
+- There is no SAX interface (yet)
 
 ## Incorporation
 
-This library is a single header library. Including the header file is sufficient
+This library provides two options:
+
+- single-header (./include)
+
+- conventional (./library)
 
 ## Dependencies
 
-The STL library
+- The STL library
+
+## Pseudo-Dependencies
+
+- Auto-injected:
+
+	- Base64 (EE_base64)
+
+- Limited functionality without:
+
+	- (none)
 
 ## LIMITATIONS
 
-Individual elements in tag elements have a maximum size of 65,535 bytes. 
-Individual tags have a maximum size of 4,294,967,295 bytes. 
-Serializations temporarily reserve 8kb per nested element during serialization. Compile with SERIALIZE_NORESERVE defined to disable.
+- Individual elements in tag elements have a maximum size of 65,535 bytes (63.9 Kb).
+- Individual tags have a maximum size of 4,294,967,295 bytes (3.9 Gb).
+- (Due to be changed) Maximum single-call deserialization will only read up to 18,446,744,073,709,551,615 bytes (~16 Eb) from buffer
+- (Due to be changed) Although buffers are read sequentially, there is no SAX interface.
+- Serializations temporarily reserve 8kb per nested element during serialization. Compile with SERIALIZE_NORESERVE defined to disable.
 
 ## Available utilities intended for use by the programmer
 
-### class CompoundNode (also compound_node)
-**within the namespace "Serialize" (also serialize)**
+### `Serialize::`
 
-A serializable json-like data structure. Contains key-value pairs for the following in discrete hashmaps:
+**`class CompoundNode{...}`** (AKA `serialize::compound_node`)
 
-- Generic non-referencing types and arrays (tags)
-- "child" structures (child nodes)
-- arrays of child structures (arrays of child nodes)
+A serializable json-like data structure. Contains key-value pairs for the following in discrete hash tables:
 
-The type of the tag is not preserved through serialization. However, the tag can be retrieved as any compatible type (i.e. any type that has the same size). The serialized data structure is stored as a binary vector of bytes in the little endian format. Note that conversion to the host architecture is automatic when deserializing.
+- Generic non-referencing types and arrays (generic blocks of homogeneous type)
+- "child" structures (child CompoundNodes)
+- arrays of child structures (arrays of CompoundNodes)
 
-#### Methods:
+The type of the tag is not preserved through serialization. However, the tag can be retrieved as any compatible type (i.e. any type that has the same size).
 
-#### CompoundNode(){};
+For human-readable serialization, there exists a function `SizedBlock::assign_meta` to hint a datatype to represent the data.
 
-Constructor
 
-#### template<typename T> void put(std::string key, T var);
+**`class SizedBlock{...}`** (AKA `serialize::compound_node`)
+
+Not intended for logical use outside of the library except `assign_meta(uint8_t meta)`
+
+#### `SizedBlock::`
+
+`void assign_meta(uint8_t)`
+
+Assigns meta to data for use in human-readable serializations. Meta is preserved throughout all serializations. Available values are:  
+```
+SB_META_UNDEFINED
+SB_META_INT_STYLE
+SB_META_FLOAT_STYLE
+SB_META_BOOLEAN
+SB_META_STRING
+```
+Default is `SB_META_UNDEFINED`. Undefined meta will cause a tag to be skipped when in human-readable serializations.
+
+#### `CompoundNode::`
+
+`CompoundNode(){}`
+
+Constructor. Constructs an empty node.
+
+`template<typename T> void put(std::string key, T var)`
 
 Insert a tag with the respective key and value. This will safley override and replace an existing tag, if present.
 
+`template<typename T> void put_string(std::string key, size_t amount, T* vars)`
 
-#### template<typename T> void put_string(std::string key, size_t amount, T* vars);
-
-Insert a c-style string with the respective key and values. Strings are stored in the same hash table space as scalars.
-
-
-#### template<typename T> void put_string(std::string key, std::vector<T>* vars);
-
-Insert a vector with the respective key and values.
+Insert a c-style string with the respective key and values. Strings are stored in the same hash table space as single tags.
 
 
-#### void put(std::string key, CompoundNode* node);
+`template<typename T> void put_string(std::string key, std::vector<T>* vars)`
+
+Insert a vector (string) with the respective key and values.
+
+
+`SizedBlock* put(std::string key, CompoundNode* node)`
 
 Insert a copy of the given node as a child.
 
-
-#### void put(std::string key, std::vector<CompoundNode*>* nodes);
+`SizedBlock* put(std::string key, std::vector<CompoundNode*>* nodes)`
 
 Insert a copy of the vector of the nodes as a child array.
 
 
-#### void put_back(std::string key, CompoundNode* node);
+`SizedBlock* put_back(std::string key, CompoundNode* node)`
 
 Append a copy of the given node to the child array.
 
-
-#### template<typename T> bool has_compat(std::string key);
+`template<typename T> bool has_compat(std::string key)`
 
 Determine whether there is a tag that can be retrieved as [a single instance of] the given variable.
 
-
-#### template<typename T> bool has_compat_string(std::string key);
+`template<typename T> bool has_compat_string(std::string key)`
 
 Determines whether there is a tag that can be retrieved as a string (of any length, including 1) of the given variable.
 
+`bool has_node(std::string key)`
 
-#### bool has_tag(std::string key);
-
-Determines whether a tag exists.
-
-
-#### bool has_tag_list(std::string key);
-
-Determines whether a tag exists, including string types.
+Determines whether a child node exists.
 
 
-#### template<typename T> T get(std::string key);
+`bool has_node_list(std::string key)`
+
+Determines whether a child node list exists.
+
+
+`template<typename T> T get(std::string key)`
 
 Get a copy of the value of the given tag
 
 
-#### template<typename T> std::vector<T> get_string(std::string key);
+`template<typename T> std::vector<T> get_string(std::string key)`
 
 Get a copy of the given tag as a vector
 
 
-#### template<typename T> T* get_ref(std::string key);
+`template<typename T> T* get_ref(std::string key)`
 
-Get a reference to the tag as a c-style string
-
-
-#### size_t get_string_length(std::string key);
-
-Get the length of the tag in number of elements
+Retrieve a pointer to the actual data contained with a tag
 
 
-#### CompoundNode* get_node(std::string key);
+`size_t get_string_length(std::string key)`
 
-Get a child node
-
-
-#### std::vector<CompoundNode*> get_node_list(std::string key);
-
-Get a vector of references to the nodes in the list
+Calculate the number of elements in a tag
 
 
-#### size_t get_node_list_length(std::string key);
+`CompoundNode* get_node(std::string key)`
+
+Retrieve a reference to a child node
+
+
+`std::vector<CompoundNode*> get_node_list(std::string key)`
+
+Retrieve a list of references to child nodes in a list
+
+
+`size_t get_node_list_length(std::string key)`
 
 Get the length of a node list
 
 
-#### void copy_to(CompoundNode* node);
+`void copy_to(CompoundNode* node)`
 
-Copy the node and it's descendants to the given node
+Recursively copy to another node. This erases the target node first.
+
+**[DEPRECATED]** `std::string similair_json()`
+
+For debugging, it returns a pseudocode representation of the data structure. Please note that some tags may display as the pointer address.
+
+`std::vector<char> serialize()`
+
+Generate a binary serialization of the tag and its descendants.
 
 
-#### std::string similair_json();
+`bool deserialize(std::vector<char>* data, size_t start_index, size_t* end_index)`
 
-Exclusively for debugging, returns a json pseudo-equivalent of the data structure. Please note that some tags may display as the pointer address
-
-#### std::vector<char> serialize();
-
-Return a block of data that fully expresses the data structure
-
-
-#### bool deserialize(std::vector<char>* data, size_t start_index, size_t* end_index);
-
-Initialize the node as the data structure expressed in the block. The end index may be nullptr.
+Deserializes from the given buffer. Returns `true` if successful.
  
 
-#### void destroy_children();
+`void destroy_children()`
 
-Destroy the node and the child data structure.
+Delete the node's tags and its children, resulting in an empty node.
 
-#### bool operator [];
+`bool operator[]`
 
-Returns wether there is a child or tag of the name
+Returns whether there is a tag of the name contained within the brackets.
 
-### Other
+`std::string serialize_encode()`
 
-There are other public types and methods for internal use.
+Returns a string-compatible serialization in base64 encoding.
+
+`bool decode_deserialize()`
+
+Deserializes from a base64 encoded serialization.
+
+`std::string serialize_readable()`
+
+Serialize into a human-readable notation.
+
+`bool deserialize_readable(std::string data)`
+
+Deserialize from a human-readable notation.
+
 
 ## Resources
 
 ### Bug tracker:
 
 https://github.com/RawSteak0/serialize/issues
-Please submit issues in the Stackoverflow style, reading prior issues to avoid duplicating.
+Please submit issues after reading prior issues to avoid duplicating.
 
 ### Example:
 
 ./example/main.cpp
 No linking should be necessary
+
