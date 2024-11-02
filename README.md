@@ -214,7 +214,7 @@ Deserialize from a human-readable notation.
 
 ### Readable Serialization Specification Summary:
 
-![A picture summarising the syntax of the readable serilization notation](https://ibb.co/bv5KfR6 "")
+![spec drawio](https://github.com/user-attachments/assets/18a0d042-dc48-4f45-ab64-4ff6e9594760)
 
 ### Bug tracker:
 
