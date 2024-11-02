@@ -212,6 +212,10 @@ Deserialize from a human-readable notation.
 
 ## Resources
 
+### Readable Serialization Specification Summary:
+
+![A picture summarising the syntax of the readable serilization notation](https://imgur.com/a/BAsdv2Y "")
+
 ### Bug tracker:
 
 https://github.com/RawSteak0/serialize/issues
