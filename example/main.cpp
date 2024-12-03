@@ -73,7 +73,7 @@ int main(){
 
   node.put("child", &child_node); //makes a copy
 
-  printf("node has child \"child\": %s\n", node.has_tag("child")?"true":"false");
+  printf("node has child \"child\": %s\n", node.has_node("child")?"true":"false");
   printf("node has member \"child\": %s\n", node["child"]?"true":"false");
   printf("changing nodes's child's tag \"letters\", using overriding function\n");
 
@@ -90,7 +90,7 @@ int main(){
     ->assign_meta(SB_META_STRING);
   node.put_string<char>("reserved escapes can be used as well \\{}", 12, ":\\\"\\4{}:\\:")->assign_meta(SB_META_STRING);
 
-  printf("node has tag list \"child array\" : %s\n", node.has_tag_list("child array")?"true":"false");
+  printf("node has tag list \"child array\" : %s\n", node.has_node_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
 
   printf("\n Node Contents: \n\n%s\n",node.serialize_readable(false).c_str());
