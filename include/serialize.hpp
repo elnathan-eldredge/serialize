@@ -10,6 +10,7 @@
 #include <string>
 #include <string.h>
 
+#define EE_Serialize
 //this definition is limited to this file, to ensure cross-compatibility with system bitness.
 #define un_size_t uint64_t
 
