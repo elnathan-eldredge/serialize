@@ -63,7 +63,7 @@ The type of the tag is not preserved through serialization. However, the tag can
 For human-readable serialization, there exists a function `SizedBlock::assign_meta` to hint a datatype to represent the data.
 
 
-**`class SizedBlock{...}`** (AKA `serialize::compound_node`)
+**`class SizedBlock{...}`** (AKA `serialize::sized_block`)
 
 Not intended for logical use outside of the library except `assign_meta(uint8_t meta)`
 
