@@ -13,7 +13,7 @@ Hashtable style serialization library
 
 ## Current notices:
 
-- All referenced values are passed as a pointer
+- Differing from standard convention, (as far as the interface goes), values passed by refrence will not be mutated. Values passed by pointer may be mutated by either party, so long as the mutation is thread-safe.
 - There is no SAX interface (yet)
 
 ## Incorporation
@@ -96,21 +96,21 @@ Insert a tag with the respective key and value. This will safley override and re
 Insert a c-style string with the respective key and values. Strings are stored in the same hash table space as single tags.
 
 
-`template<typename T> void put_string(std::string key, std::vector<T>* vars)`
+`template<typename T> void put_string(std::string key, std::vector<T>& vars)`
 
 Insert a vector (string) with the respective key and values.
 
 
-`SizedBlock* put(std::string key, CompoundNode* node)`
+`SizedBlock* put(std::string key, CompoundNode& node)`
 
 Insert a copy of the given node as a child.
 
-`SizedBlock* put(std::string key, std::vector<CompoundNode*>* nodes)`
+`SizedBlock* put(std::string key, std::vector<CompoundNode*& nodes)`
 
 Insert a copy of the vector of the nodes as a child array.
 
 
-`SizedBlock* put_back(std::string key, CompoundNode* node)`
+`SizedBlock* put_back(std::string key, CompoundNode& node)`
 
 Append a copy of the given node to the child array.
 
@@ -221,7 +221,7 @@ Deserialize from a human-readable notation.
 https://github.com/RawSteak0/serialize/issues
 Please submit issues after reading prior issues to avoid duplicating.
 
-### Example:
+### Example:t
 
 ./example/main.cpp
 No linking should be necessary

@@ -1,4 +1,39 @@
 #pragma once
+/*
+This is free and unencumbered software released into the public domain.
+
+Anyone is free to copy, modify, publish, use, compile, sell, or
+distribute this software, either in source code form or as a compiled
+binary, for any purpose, commercial or non-commercial, and by any
+means.
+
+In jurisdictions that recognize copyright laws, the author or authors
+of this software dedicate any and all copyright interest in the
+software to the public domain. We make this dedication for the benefit
+of the public at large and to the detriment of our heirs and
+successors. We intend this dedication to be an overt act of
+relinquishment in perpetuity of all present and future rights to this
+software under copyright law.
+
+The original creator of this software is:
+
+Elnathan Eldredge
+
+It is not required to cite the author in any copy or derivative of this software
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+See also https://unlicense.org/
+
+May 27, 2024
+*/
+
 #include <cstdint>
 #include <istream>
 #include <unordered_map>
@@ -43,10 +78,12 @@
 #define serialize Serialize
 #define compound_node CompoundNode
 
-//If not already included in a seprate library
-#ifndef EE_base64
-#define EE_base64
+#define bp(k)   \
+  printf("Breakpoint: %s\n",k);
 
+//If not already included in a seprate library
+
+#ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
   namespace base64{
     namespace detail {
@@ -95,7 +132,7 @@ namespace Serialize{
       un_size_t idx;
       for(char c : data){
         ++idx;
-        if(!(detail::numtable[c] + 1))
+        if(!(detail::numtable[(size_t)c] + 1))
           return idx;
       }
       return 0;
@@ -108,7 +145,7 @@ namespace Serialize{
       b64raw.reserve(data.size());
       char* dat = (char*)data.c_str();
       for(un_size_t i = 0; i < data.size(); i++){
-        char ans = detail::numtable[dat[i]];
+        char ans = detail::numtable[(size_t)dat[i]];
         //      printf("I: %d, %c\n", ans, data[i]);
         if(ans == SRLS_EQ_ESCAPE_CODE) break;
         if(ans == 255){
@@ -249,7 +286,7 @@ namespace Serialize{
 
     char* upper(char* data, char* max);
 
-    uint64_t upper(std::vector<char>* data, uint64_t starting_index);
+    uint64_t upper(std::vector<char>& data, uint64_t starting_index);
     
     void dump();
 
@@ -273,13 +310,13 @@ namespace Serialize{
 
     template<typename T> SizedBlock* put_string(std::string key, un_size_t amount, T* vars);
 
-    template<typename T> SizedBlock* put_string(std::string key, std::vector<T>* vars);
+    template<typename T> SizedBlock* put_string(std::string key, std::vector<T>& vars);
 
-    void put(std::string key, CompoundNode* node);
+    void put(std::string key, CompoundNode& node);
 
-    void put(std::string key, std::vector<CompoundNode*>* nodes);
+    void put(std::string key, std::vector<CompoundNode*>& nodes);
 
-    void put_back(std::string key, CompoundNode* node);
+    void put_back(std::string key, CompoundNode& node);
 
     template<typename T> bool has_compat(std::string key);
 
@@ -389,7 +426,7 @@ namespace Serialize{
     _skip_whitespace(data, idx, 0);
     if ((*data)[*idx] != *"\"")
       return false;
-    while (((*data)[++*idx] >= 32 && (*data)[*idx] <= 126 ||
+    while ((((*data)[++*idx] >= 32 && (*data)[*idx] <= 126) ||
             (*data)[*idx] == 9 || (*data)[*idx] == 32) &&
            (*data)[*idx] != *"\"") {
       if ((*data)[*idx] == *"\\" && (*data)[*idx + 1] == *"\"") {
@@ -531,7 +568,7 @@ namespace Serialize{
 
   std::string _add_escapes_to_string_readable(std::string str){
     std::string new_string;
-    for(int i = 0; i < str.length(); i ++){
+    for(int i = 0; i < (ssize_t)str.length(); i ++){
       if(str[i] == *"\"")
         new_string += *"\\";
       new_string += str[i];
@@ -634,8 +671,6 @@ namespace Serialize{
 #define _rassert_token(ptr, idx, tok)                                          \
   if (ptr[idx] != tok)                                                         \
     return false;
-#define bp(k)   \
-  printf("Breakpoint: %s\n",k);
 
   bool CompoundNode::deserialize_readable(std::string data) {
     std::vector<char> vec;
@@ -912,35 +947,24 @@ namespace Serialize{
       ++idx;
       _skip_whitespace(vdata, &idx, 0);
       if (data[idx] == *"{") {
-        CompoundNode *newnode = new CompoundNode;
-        //        printf("prechar: %c\n", data[idx]);
-        if(!newnode->deserialize_readable(vdata, idx, &idx)){
-          delete newnode;
-          //          printf("nested node is kaka %s %d\n", key.c_str(), idx);
+        CompoundNode newnode = CompoundNode();
+        if(!newnode.deserialize_readable(vdata, idx, &idx)){
           return false;
         }
-        //        printf("ended nodep on index %d\n", idx);
-        this->put(key, newnode);
-        delete newnode;
+        this->put(key, &newnode);
       } else if (data[idx] == *"[") {
         ++idx;
         _return_if_EOF(vdata, idx);
         while (true) {
           _skip_whitespace(vdata, &idx, 0);
           _rassert_token(data, idx, *"{");
-          //          bp("prenode");
-          CompoundNode *newnode = new CompoundNode;
-          if (!(newnode->deserialize_readable(vdata, idx, &idx))) {
-            delete newnode;
-            //            printf("bruh cannot parse array-enclosed node\n");
+          CompoundNode newnode = CompoundNode();
+          if (!(newnode.deserialize_readable(vdata, idx, &idx))) {
             return false;
           }
           this->put_back(key, newnode);
-          //          printf("ended array->nodep on index %d\n", idx);
-          delete newnode;
           ++idx;
           _skip_whitespace(vdata, &idx, 0);
-          //          printf("after node parsing: %d\n",idx);
           if (data[idx] == *",") {
             ++idx;
             continue;
@@ -1046,7 +1070,7 @@ namespace Serialize{
       case COMPOUND_NODE_BEGIN_FLAG:{
         CompoundNode* new_child_node = new CompoundNode();
         if(!new_child_node->deserialize(data, index, &index)){
-          free(new_child_node);
+          delete new_child_node;
           return false;
         }
         --index;
@@ -1066,20 +1090,18 @@ namespace Serialize{
             return false;
           };
           if((*data)[index] == COMPOUND_NODE_END_LIST_FLAG) break;
-          CompoundNode* new_child_node = new CompoundNode();
-          if(!new_child_node->deserialize(data, index, &index)){
-            free(new_child_node);
+          CompoundNode new_child_node = CompoundNode();
+          if(!new_child_node.deserialize(data, index, &index)){
             return false;
           }
           new_node.put_back(key, new_child_node);
-          delete(new_child_node);
         }
         break;
       }
       case COMPOUND_NODE_BEGIN_BLOCK_FLAG:{
         ++index;
         SizedBlock* new_block = new SizedBlock();
-        index = new_block->upper(data, index);
+        index = new_block->upper(*data, index);
         if(!index){
           delete new_block;
           return false;
@@ -1104,7 +1126,7 @@ namespace Serialize{
 
   std::string _add_escapes_to_string(std::string str){
     std::string new_string;
-    for(int i = 0; i < str.length(); i ++){
+    for(int i = 0; i < (ssize_t)str.length(); i ++){
       if(str[i] == COMPOUND_NODE_BEGIN_ELEMENT_FLAG)
         new_string += *"\\";
       new_string += str[i];
@@ -1170,13 +1192,13 @@ namespace Serialize{
         }
         json += "]";
       }
-      if(++c < generic_tags.size() || child_nodes.size() || child_node_lists.size())
+      if(++c < (ssize_t)generic_tags.size() || child_nodes.size() || child_node_lists.size())
         json += ",";
     }
     c = 0;
     for(std::pair<std::string, CompoundNode*> pair: child_nodes){
       json += "\"" + pair.first + "\": "+ pair.second->similair_json();
-      if(++c < child_nodes.size() || child_node_lists.size())
+      if(++c < (ssize_t)child_nodes.size() || child_node_lists.size())
         json += ",";
     }
     c = 0;
@@ -1189,7 +1211,7 @@ namespace Serialize{
           json += ",";
       }
       json += "]";
-      if(++c < child_node_lists.size())
+      if(++c < (ssize_t)child_node_lists.size())
         json += ",";
     }
     json += "}";
@@ -1255,34 +1277,34 @@ namespace Serialize{
     return generic_tags[key]->span == sizeof(T);
   }
 
-  void CompoundNode::put(std::string key, std::vector<CompoundNode*>* nodes){
+  void CompoundNode::put(std::string key, std::vector<CompoundNode*>& nodes){
     if(exists_key<std::vector<CompoundNode*>>(&child_node_lists, key)){
       for(CompoundNode* node: child_node_lists[key]){
         delete node;
       }
       child_node_lists[key].clear();
     }
-    child_node_lists[key].reserve(nodes->size());
-    for(CompoundNode* node: *nodes){
+    child_node_lists[key].reserve(nodes.size());
+    for(CompoundNode* node : nodes){
       CompoundNode* new_node = new CompoundNode();
       node->copy_to(new_node);
       child_node_lists[key].push_back(new_node);      
     }
   }
 
-  void CompoundNode::put_back(std::string key, CompoundNode* node){
+  void CompoundNode::put_back(std::string key, CompoundNode& node){
     if(!exists_key<std::vector<CompoundNode*>>(&child_node_lists, key))
       child_node_lists[key] = std::vector<CompoundNode*>();
     CompoundNode* new_node = new CompoundNode();
-    node->copy_to(new_node);
+    node.copy_to(new_node);
     child_node_lists[key].push_back(new_node);
   }
 
-  void CompoundNode::put(std::string key, CompoundNode* node){
+  void CompoundNode::put(std::string key, CompoundNode& node){
     if(exists_key<CompoundNode*>(&child_nodes, key))
       delete child_nodes[key];
     CompoundNode* new_node = new CompoundNode();
-    node->copy_to(new_node);
+    node.copy_to(new_node);
     child_nodes[key] = new_node;
   }
 
@@ -1331,9 +1353,9 @@ namespace Serialize{
   }
 
   template<typename T>
-  SizedBlock* CompoundNode::put_string(std::string key, std::vector<T>* vars){
-    T* p_vars = vars->data();
-    un_size_t amount = vars->size();
+  SizedBlock* CompoundNode::put_string(std::string key, std::vector<T>& vars){
+    T* p_vars = vars.data();
+    un_size_t amount = vars.size();
     burninate_generic_if_exists(key);
     SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
     generic_tags[key] = ptr;
@@ -1403,7 +1425,8 @@ namespace Serialize{
   char* SizedBlock::upper(char* data, char* maxaddress){ //returns the address AFTER all the data used
     if(span) dump();
     char* max = maxaddress + 1;
-    if(max - data < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
+    if(max < data) return nullptr;
+    if((uint64_t)(max - data) < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
     uint16_t element_size;
     memcpy(&element_size, data + sizeof(uint8_t), sizeof(uint16_t));
     element_span = little_endian<uint16_t>(element_size);// also goes from little to native
@@ -1411,7 +1434,7 @@ namespace Serialize{
     memcpy(&total_size, data + sizeof(uint8_t) + sizeof(uint16_t), sizeof(un_size_t));
     span = little_endian<un_size_t>(total_size);
     char* data_after_header = data + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
-    if(max - data < total_size + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)){
+    if((uint64_t)(max - data) < total_size + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)){
       meta = 0;
       span = 0;
       element_span = 0;
@@ -1427,8 +1450,8 @@ namespace Serialize{
     return data_after_header + span;
   }
 
-  uint64_t SizedBlock::upper(std::vector<char>* data, uint64_t starting_index){
-    return (upper(data->data() + starting_index, data->data() + data->size() - 1) - data->data());
+  uint64_t SizedBlock::upper(std::vector<char>& data, uint64_t starting_index){
+    return (upper(data.data() + starting_index, data.data() + data.size() - 1) - data.data());
   }
 
   void SizedBlock::dump(){
@@ -1452,7 +1475,6 @@ namespace Serialize{
 }
 
 #undef un_size_t
-
 #undef _return_if_EOF
 #undef _rassert_token
 #undef bp
