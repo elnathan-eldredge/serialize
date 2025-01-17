@@ -71,7 +71,7 @@ int main(){
 
   printf("child node member \"letters\" : %s\n", child_node.get_ref<char>("letters"));
 
-  node.put("child", &child_node); //makes a copy
+  node.put("child", child_node); //makes a copy
 
   printf("node has child \"child\": %s\n", node.has_node("child")?"true":"false");
   printf("node has member \"child\": %s\n", node["child"]?"true":"false");
@@ -83,9 +83,9 @@ int main(){
   printf("original node's tag's value: %s\n", child_node.get_ref<char>("letters"));
   printf("node's child's tag's value: %s\n", node.get_node("child")->get_ref<char>("letters"));
 
-  node.put_back("child array", &child_node);
-  node.put_back("child array", &child_node);
-  node.put_back("child array", &child_node);
+  node.put_back("child array", child_node);
+  node.put_back("child array", child_node);
+  node.put_back("child array", child_node);
   node.get_node_list("child array")[0]->put_string<char>("letters", 8, "opqrstu")
     ->assign_meta(SB_META_STRING);
   node.put_string<char>("reserved escapes can be used as well \\{}", 12, ":\\\"\\4{}:\\:")->assign_meta(SB_META_STRING);
