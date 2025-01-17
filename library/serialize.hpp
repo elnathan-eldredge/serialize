@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstdint>
 #include <istream>
 #include <unordered_map>
@@ -10,6 +11,7 @@
 #include <string>
 #include <string.h>
 
+#define EE_Serialize
 //this definition is limited to this file, to ensure cross-compatibility with system bitness.
 #define un_size_t uint64_t
 
@@ -42,10 +44,12 @@
 #define serialize Serialize
 #define compound_node CompoundNode
 
-//If not already included in a seprate library
-#ifndef EE_base64
-#define EE_base64
+#define bp(k)   \
+  printf("Breakpoint: %s\n",k);
 
+//If not already included in a seprate library
+
+#ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
   namespace base64{
     namespace detail {
@@ -94,7 +98,7 @@ namespace Serialize{
       un_size_t idx;
       for(char c : data){
         ++idx;
-        if(!(detail::numtable[c] + 1))
+        if(!(detail::numtable[(size_t)c] + 1))
           return idx;
       }
       return 0;
@@ -107,7 +111,7 @@ namespace Serialize{
       b64raw.reserve(data.size());
       char* dat = (char*)data.c_str();
       for(un_size_t i = 0; i < data.size(); i++){
-        char ans = detail::numtable[dat[i]];
+        char ans = detail::numtable[(size_t)dat[i]];
         //      printf("I: %d, %c\n", ans, data[i]);
         if(ans == SRLS_EQ_ESCAPE_CODE) break;
         if(ans == 255){
@@ -248,7 +252,7 @@ namespace Serialize{
 
     char* upper(char* data, char* max);
 
-    uint64_t upper(std::vector<char>* data, uint64_t starting_index);
+    uint64_t upper(std::vector<char>& data, uint64_t starting_index);
     
     void dump();
 
@@ -272,21 +276,21 @@ namespace Serialize{
 
     template<typename T> SizedBlock* put_string(std::string key, un_size_t amount, T* vars);
 
-    template<typename T> SizedBlock* put_string(std::string key, std::vector<T>* vars);
+    template<typename T> SizedBlock* put_string(std::string key, std::vector<T>& vars);
 
-    void put(std::string key, CompoundNode* node);
+    void put(std::string key, CompoundNode& node);
 
-    void put(std::string key, std::vector<CompoundNode*>* nodes);
+    void put(std::string key, std::vector<CompoundNode*>& nodes);
 
-    void put_back(std::string key, CompoundNode* node);
+    void put_back(std::string key, CompoundNode& node);
 
     template<typename T> bool has_compat(std::string key);
 
     template<typename T> bool has_compat_string(std::string key);
 
-    bool has_tag(std::string key);
+    bool has_node(std::string key);
 
-    bool has_tag_list(std::string key);
+    bool has_node_list(std::string key);
 
     template<typename T> T get(std::string key);
 
@@ -320,8 +324,12 @@ namespace Serialize{
 
     std::string serialize_readable(bool omit_undefined);
 
+  private:
     bool deserialize_readable(std::vector<char> *data, un_size_t start_index,
                               un_size_t *end_index);
+
+  public:
+    
     bool deserialize_readable(std::string data);
     
     ~CompoundNode();
