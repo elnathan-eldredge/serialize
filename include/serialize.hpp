@@ -78,6 +78,9 @@ May 27, 2024
 #define serialize Serialize
 #define compound_node CompoundNode
 
+#define bp(k)   \
+  printf("Breakpoint: %s\n",k);
+
 //If not already included in a seprate library
 
 #ifndef SERIALIZE_NO_IMPLEMENT_b64
@@ -309,11 +312,11 @@ namespace Serialize{
 
     template<typename T> SizedBlock* put_string(std::string key, std::vector<T>& vars);
 
-    void put(std::string key, CompoundNode* node);
+    void put(std::string key, CompoundNode& node);
 
-    void put(std::string key, std::vector<CompoundNode*>* nodes);
+    void put(std::string key, std::vector<CompoundNode*>& nodes);
 
-    void put_back(std::string key, CompoundNode* node);
+    void put_back(std::string key, CompoundNode& node);
 
     template<typename T> bool has_compat(std::string key);
 
@@ -668,8 +671,6 @@ namespace Serialize{
 #define _rassert_token(ptr, idx, tok)                                          \
   if (ptr[idx] != tok)                                                         \
     return false;
-#define bp(k)   \
-  printf("Breakpoint: %s\n",k);
 
   bool CompoundNode::deserialize_readable(std::string data) {
     std::vector<char> vec;
@@ -947,34 +948,23 @@ namespace Serialize{
       _skip_whitespace(vdata, &idx, 0);
       if (data[idx] == *"{") {
         CompoundNode newnode = CompoundNode();
-        //        printf("prechar: %c\n", data[idx]);
         if(!newnode.deserialize_readable(vdata, idx, &idx)){
-	  //          delete newnode;
-          //          printf("nested node is kaka %s %d\n", key.c_str(), idx);
           return false;
         }
-        //        printf("ended nodep on index %d\n", idx);
         this->put(key, &newnode);
-	//        delete newnode;
       } else if (data[idx] == *"[") {
         ++idx;
         _return_if_EOF(vdata, idx);
         while (true) {
           _skip_whitespace(vdata, &idx, 0);
           _rassert_token(data, idx, *"{");
-          //          bp("prenode");
-          CompoundNode *newnode = new CompoundNode;
-          if (!(newnode->deserialize_readable(vdata, idx, &idx))) {
-            delete newnode;
-            //            printf("bruh cannot parse array-enclosed node\n");
+          CompoundNode newnode = CompoundNode();
+          if (!(newnode.deserialize_readable(vdata, idx, &idx))) {
             return false;
           }
           this->put_back(key, newnode);
-          //          printf("ended array->nodep on index %d\n", idx);
-          delete newnode;
           ++idx;
           _skip_whitespace(vdata, &idx, 0);
-          //          printf("after node parsing: %d\n",idx);
           if (data[idx] == *",") {
             ++idx;
             continue;
@@ -1100,13 +1090,11 @@ namespace Serialize{
             return false;
           };
           if((*data)[index] == COMPOUND_NODE_END_LIST_FLAG) break;
-          CompoundNode* new_child_node = new CompoundNode();
-          if(!new_child_node->deserialize(data, index, &index)){
-            delete new_child_node;
+          CompoundNode new_child_node = CompoundNode();
+          if(!new_child_node.deserialize(data, index, &index)){
             return false;
           }
           new_node.put_back(key, new_child_node);
-          delete(new_child_node);
         }
         break;
       }
@@ -1289,34 +1277,34 @@ namespace Serialize{
     return generic_tags[key]->span == sizeof(T);
   }
 
-  void CompoundNode::put(std::string key, std::vector<CompoundNode*>* nodes){
+  void CompoundNode::put(std::string key, std::vector<CompoundNode*>& nodes){
     if(exists_key<std::vector<CompoundNode*>>(&child_node_lists, key)){
       for(CompoundNode* node: child_node_lists[key]){
         delete node;
       }
       child_node_lists[key].clear();
     }
-    child_node_lists[key].reserve(nodes->size());
-    for(CompoundNode* node: *nodes){
+    child_node_lists[key].reserve(nodes.size());
+    for(CompoundNode* node : nodes){
       CompoundNode* new_node = new CompoundNode();
       node->copy_to(new_node);
       child_node_lists[key].push_back(new_node);      
     }
   }
 
-  void CompoundNode::put_back(std::string key, CompoundNode* node){
+  void CompoundNode::put_back(std::string key, CompoundNode& node){
     if(!exists_key<std::vector<CompoundNode*>>(&child_node_lists, key))
       child_node_lists[key] = std::vector<CompoundNode*>();
     CompoundNode* new_node = new CompoundNode();
-    node->copy_to(new_node);
+    node.copy_to(new_node);
     child_node_lists[key].push_back(new_node);
   }
 
-  void CompoundNode::put(std::string key, CompoundNode* node){
+  void CompoundNode::put(std::string key, CompoundNode& node){
     if(exists_key<CompoundNode*>(&child_nodes, key))
       delete child_nodes[key];
     CompoundNode* new_node = new CompoundNode();
-    node->copy_to(new_node);
+    node.copy_to(new_node);
     child_nodes[key] = new_node;
   }
 
