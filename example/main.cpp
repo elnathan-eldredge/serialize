@@ -27,7 +27,7 @@ int main(){
   block.dump();
 
   //this function initializes from the serialized data
-  block.upper(&disk,0);
+  block.upper(disk,0);
 
   printf("(deserialized) element_size: %d, size: %d\n",block.element_span, block.span);
   printf("deserialized number: 0x%lx\n", *((uint64_t*)block.contents_native));
