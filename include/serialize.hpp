@@ -1335,7 +1335,7 @@ namespace Serialize{
     T* p_vars = vars->data();
     un_size_t amount = vars->size();
     burninate_generic_if_exists(key);
-    SizedBlock* ptr = SizedBlock(sizeof(T), amount, p_vars);
+    SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
     generic_tags[key] = ptr;
     return ptr;
   }
