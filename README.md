@@ -28,6 +28,8 @@ This library provides two options:
 
 - The STL library
 
+- System support for uint64_t
+
 ## Pseudo-Dependencies
 
 - Auto-injected:

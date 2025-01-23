@@ -127,18 +127,20 @@ namespace Serialize{
       output.reserve((data.size()/4)*3); //the b64 array is a multiple of 4
       for(char byte : b64raw){
         if(byte==SRLS_EQ_ESCAPE_CODE) break;
-        output.push_back(0);
         switch(cur64idx % 4){
         case 0:
+          output.push_back(0);
           output[nextemptyidx] |= (byte & detail::d1_1_mask) << detail::s1_1_rlshift;
           nextemptyidx += 1;
           break;
         case 1:
+          output.push_back(0);
           output[nextemptyidx - 1] |= (byte & detail::d2_1_mask) >> detail::s1_2_lrshift;
           output[nextemptyidx] |= (byte & detail::d2_2_mask) << detail::s2_2_rlshift;
           nextemptyidx += 1;
           break;
         case 2:
+          output.push_back(0);
           output[nextemptyidx - 1] |= (byte & detail::d3_2_mask) >> detail::s2_3_lrshift;
           output[nextemptyidx] |= (byte & detail::d3_3_mask) << detail::s3_3_rlshift;
           nextemptyidx += 1;
