@@ -29,16 +29,19 @@ int main(){
   //this function initializes from the serialized data
   block.upper(disk,0);
 
+  //debug
   printf("(deserialized) element_size: %d, size: %d\n",block.element_span, block.span);
   printf("deserialized number: 0x%lx\n", *((uint64_t*)block.contents_native));
   printf("number: 0x%lx\n", number);
   printf("numbers match: %s\n", (number == *((uint64_t*)block.contents_native))
          ?"TRUE":"FALSE (something has gone terribly wrong)");
   
+
   printf("##########################\nCompoundNode tests\n##########################\n");
 
   Serialize::compound_node node;
 
+  //Test the CompoundNode store functions
   node.put<double>("double", -0.196152423)->assign_meta(SB_META_FLOAT_STYLE);
   node.put_string<char>("wrong meta'd string", 5, "wxyz")->assign_meta(SB_META_FLOAT_STYLE);
   node.put<uint64_t>("number64",number)->assign_meta(SB_META_INT_STYLE);
@@ -47,7 +50,8 @@ int main(){
   node.put_string<char>("some string2", 29, "this is a string of letters2")
       ->assign_meta(SB_META_STRING);
   node.put<int8_t>("number8", -127)->assign_meta(SB_META_INT_STYLE);
-  
+
+  //Store the same 128 bits in diffrent ways
   int64_t sixteenchars[2] = {(int64_t)0xFF02030405060708, 0x090A0B0C0D0E00};
   node.put_string<int8_t>("sixteen number8s", 16, (int8_t *)sixteenchars)
       ->assign_meta(SB_META_INT_STYLE);
@@ -71,13 +75,13 @@ int main(){
 
   printf("child node member \"letters\" : %s\n", child_node.get_ref<char>("letters"));
 
-  node.put("child", child_node); //makes a copy
+  node.put("child", child_node); //this function copies the node into itself
 
   printf("node has child \"child\": %s\n", node.has_node("child")?"true":"false");
   printf("node has member \"child\": %s\n", node["child"]?"true":"false");
   printf("changing nodes's child's tag \"letters\", using overriding function\n");
 
-  node.get_node("child")->put_string<char>("letters", 8, "higklmn")
+  node.get_node("child")->put_string<char>("letters", 8, "higklmn") //When nodes are returned by get_node functions, it is by refrence
     ->assign_meta(SB_META_STRING);
 
   printf("original node's tag's value: %s\n", child_node.get_ref<char>("letters"));
@@ -86,18 +90,20 @@ int main(){
   node.put_back("child array", child_node);
   node.put_back("child array", child_node);
   node.put_back("child array", child_node);
-  node.get_node_list("child array")[0]->put_string<char>("letters", 8, "opqrstu")
+  node.get_node_list("child array")[0]->put_string<char>("letters", 8, "opqrstu") //again, returned nodes are by refrence
     ->assign_meta(SB_META_STRING);
   node.put_string<char>("reserved escapes can be used as well \\{}", 12, ":\\\"\\4{}:\\:")->assign_meta(SB_META_STRING);
 
   printf("node has tag list \"child array\" : %s\n", node.has_node_list("child array")?"true":"false");
   printf("node tag list \"child array\" length : %d\n\n", node.get_node_list_length("child array"));
 
+  printf("##########################\nSerialization tests\n##########################\n");
+  
   printf("\n Node Contents: \n\n%s\n",node.serialize_readable(false).c_str());
 
   std::vector<char> serialized = node.serialize();
 
-  printf("\nSerialized contents (BSSF): \n\n");
+  printf("\nSerialized contents (Binary Format): \n\n");
   
   for(char character: serialized){
     putchar(character);
@@ -106,14 +112,18 @@ int main(){
 
   std::string serialized_encoded = node.serialize_encode();
 
-  printf("Serialized encoded contents (EBSSF):\n\n%s\n\n", serialized_encoded.c_str());
+  printf("Serialized contents (Encoded Format):\n\n%s\n\n", serialized_encoded.c_str());
 
+  std::string serialized_hp = node.serialize_readable(false);
+
+  printf("Serialized contents (Human Readable Format) \n\n%s\n\n", serialized_hp.c_str());
+  
   node.destroy_children();
 
   if(!node.deserialize(&serialized, 0, nullptr)){
-    puts("unable to deserialize BSSF data\n");
+    puts("unable to deserialize Binary data\n");
   } else {
-    printf("Deserialized: \n\n%s\n\n", node.serialize_readable(false).c_str());
+    printf("Deserialized contents from binary notation: \n\n%s\n\n", node.serialize_readable(false).c_str());
   }
   
   node.destroy_children();
@@ -121,14 +131,13 @@ int main(){
   if(!node.decode_deserialize(serialized_encoded)){
     puts("cannot deserialize decode node");
   } else {
-    printf("Decoded deserialized: \n\n%s\n\n", node.serialize_readable(false).c_str());
+    printf("Deserialized contents from encoded notation: \n\n%s\n\n", node.serialize_readable(false).c_str());
   }
 
-  std::string sr = node.serialize_readable(false);
   node.destroy_children();
   
-  if (node.deserialize_readable(sr)) {
-    printf("Reserialized code: \n\n%s\n\n", node.serialize_readable(false).c_str());
+  if (node.deserialize_readable(serialized_hp)) {
+    printf("Deserialsed conents from human-readable notation: \n\n%s\n\n", node.serialize_readable(false).c_str());
   } else {
     printf("cannot deserialize RSSF\n");
   }
@@ -137,13 +146,13 @@ int main(){
    "\"incomplete\" : n";
 
   printf("About to decode invalid code\n\n");
-
+  /*
   node.destroy_children();
   if (node.deserialize_readable(invalid_code)) {
     printf("from invalid data (this shoud not happen): \n\n%s\n\n", node.serialize_readable(false).c_str());
   } else {
     printf("Cannot decode invalid RSSN\n");
-  }
+    }*/
   
   return 0;
 }

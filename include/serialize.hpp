@@ -81,7 +81,8 @@ May 27, 2024
 #define bp(k)   \
   printf("Breakpoint: %s\n",k);
 
-//If not already included in a seprate library
+//If the base54 library has already been included, the programmer
+// has the option to not include the internal implementation.
 
 #ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
@@ -128,6 +129,8 @@ namespace Serialize{
       const char s3_4_lrshift = 0;
     }
 
+    //this function is used to determine wether a string can be
+    // successfully decoded
     un_size_t diagnose(std::string data){
       un_size_t idx;
       for(char c : data){
@@ -243,6 +246,7 @@ namespace Serialize{
     return e.c[0];
   }
 
+  //Inverts the endianness of data in an array
   void* invert_endian_h(uint16_t element_size, un_size_t element_count, void* data_reg){
     char* data_invert = (char*)malloc(element_size * element_count);
     char* data = (char*)data_reg;
@@ -254,11 +258,13 @@ namespace Serialize{
     return data_invert;
   }
 
+  //helper function
   template<typename T>
   bool exists_key(std::unordered_map<std::string,T>* map, std::string key){
     return map->find(key) != map->end();
   }
 
+  //force type T to be little endian
   template<typename T>
   T little_endian(T d){
     if(!is_big_endian()) return d;
@@ -269,6 +275,8 @@ namespace Serialize{
     return d_copp;
   }
 
+  //This class is a fancy wrapper around
+  // a basic array.
   class SizedBlock{
   public:
     void* contents_native;
@@ -299,7 +307,7 @@ namespace Serialize{
     ~SizedBlock();
 
   };
-
+  
   class CompoundNode {
   public:
     std::unordered_map<std::string,SizedBlock*> generic_tags;
