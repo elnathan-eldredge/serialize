@@ -1,3 +1,1 @@
-let foo = () => {
-    alert("foo")
-}
+x

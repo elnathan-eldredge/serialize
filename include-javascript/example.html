@@ -9,6 +9,16 @@
         }
         </script>
         <button onClick="main()">main</button>
+	<script src="a.out.js"></script>
+	<script>
+	  Module.onRuntimeInitialized = async () => {
+	      console.log("beginapi");
+	      const api = {
+		  version: Module.cwrap("versiont", "number", []),
+	      };
+	      console.log(api.version());
+	  };
+	</script>
     </body>
 </html>
 
