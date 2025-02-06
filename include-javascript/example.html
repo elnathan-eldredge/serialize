@@ -1,22 +1,16 @@
 <!DOCTYPE html>
 <html>
     <body>
-        <script src="serialize.js"></script>
-        <script>
-        let main = () => {
-          console.log("something")
-          foo()
-        }
-        </script>
-        <button onClick="main()">main</button>
 	<script src="a.out.js"></script>
 	<script>
 	  Module.onRuntimeInitialized = async () => {
 	      console.log("beginapi");
 	      const api = {
-		  version: Module.cwrap("versiont", "number", []),
+		  working: Module.cwrap("healthcheck", "number", []),
+                  add: Module.cwrap("sum", "number", ["number", "number"]),
 	      };
-	      console.log(api.version());
+	      console.log(api.working());
+              console.log(api.add);
 	  };
 	</script>
     </body>
