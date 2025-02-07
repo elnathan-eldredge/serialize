@@ -39,7 +39,7 @@ std::string grabfile(std::string path){
   std::string str;
   contents.push_back(*"\0");
   str = std::string(contents.data());
-  printf("%s\n",str.c_str());
+  //  printf("%s\n",str.c_str());
   return str;
 }
 

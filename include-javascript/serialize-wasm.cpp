@@ -1,15 +1,31 @@
 #include <emscripten.h>
+#include "malloc.c"
+//#include <vector>
+//#include "../include/serialize.hpp"
 
-std::unordered_map<int,CompoundNode> nodes;
+//using namespace Serialize;
+
+//std::vector<int> nodes;
 
 extern "C" {
-  EMSCRIPTEN_KEEPALIVE
+  EMSCRIPTEN_KEEPALIVE 
   int versiont(){
-    return 91800;
+    //char* i = (char*)malloc(1);
+    //    int j = *i;
+    //    free(i);
+    return 8;
   }
+  /*
   int newCompoundNode(){
     static int index;
-    blocks[++index] = CompoundNode();
+    nodes[++index] = CompoundNode();
     return index;
   }
+
+  bool _unsafe_deleteCompoundNode(int index){
+    if(nodes.find(index) == nodes.end())
+      return false;
+    nodes.erase(index);
+      return true;
+      }*/
 }
