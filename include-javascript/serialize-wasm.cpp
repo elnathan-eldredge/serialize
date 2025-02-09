@@ -6,7 +6,8 @@
 #include <emscripten.h>
 
 #include <vector>
-#include <new> // bad_alloc, bad_array_new_length
+
+//#include <new> // bad_alloc, bad_array_new_length
 template <class T> struct Mallocator {
   typedef T value_type;
   Mallocator() noexcept { } // default ctor not required
@@ -17,18 +18,19 @@ template <class T> struct Mallocator {
     const Mallocator<U>&) const noexcept { return false; }
 
   T * allocate(const size_t n) const {
-      if (n == 0) { return nullptr; }
-      if (n > static_cast<size_t>(-1) / sizeof(T)) {
-          throw std::bad_array_new_length();
-      }
-      void * const pv = malloc(n * sizeof(T));
-      if (!pv) { throw std::bad_alloc(); }
-      return static_cast<T *>(pv);
+    return static_cast<T *>(malloc(9000));
   }
   void deallocate(T * const p, size_t) const noexcept {
       free(p);
   }
 };
+
+    /*if (n == 0) { return nullptr; }
+      if (n > static_cast<size_t>(-1) / sizeof(T)) {
+          throw std::bad_array_new_length();
+      }
+      void * const pv = malloc(n * sizeof(T));
+      if (!pv) { throw std::bad_alloc(); }*/
 //using namespace Serialize;
 
 //std::vector<int> nodes;
@@ -36,17 +38,12 @@ template <class T> struct Mallocator {
 extern "C" {
   EMSCRIPTEN_KEEPALIVE 
   int versiont(){
-    emscripten_run_script("alert('ran')");
-    std::vector<int, Mallocator<int>> poop = std::vector<int, Mallocator<int>>();
-    for (int i = 0; i < 300; i++) {
-      poop.push_back(1);
-    }
-    int j = 0;
-    for (int i : poop) {
-      j += i;
-    }
-    return j;
-  return 3;
+    emscripten_run_script("alert('0')");
+    std::vector<char, Mallocator<char>> str;
+    emscripten_run_script("alert('1')");
+    str.push_back(*"a");
+    emscripten_run_script("alert('2')");
+    return str[0];
   }
 
   /*  EMSCRIPTEN_KEEPALIVE
