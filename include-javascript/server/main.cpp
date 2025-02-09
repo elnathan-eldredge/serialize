@@ -65,12 +65,12 @@ int main(){
   });
   
   svr.Get("/:file", [](const httplib::Request & req, httplib::Response &res) {
-    /*    if(guessmime(req.path) == "application/wasm"){*/
-      std::vector<char> data = grabfileb("../" + req.path);
-      res.set_content(data.data(), data.size(), guessmime(req.path));
-      /*    } else {
-      res.set_content(grabfile("../" + req.path), guessmime(req.path));
-      }*/
+    std::vector<char> data = grabfileb("../" + req.path);
+    if(guessmime(req.path) == "application/wasm")
+      data.resize(data.size());
+    res.set_content(data.data(), data.size(), guessmime(req.path));
+
+      
   });
 
   svr.listen("0.0.0.0", 8080);
