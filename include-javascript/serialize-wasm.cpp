@@ -32,7 +32,7 @@ template <class T> struct Mallocator {
   void deallocate(T * const p, size_t) const noexcept {
       free(p);
   }
-  };
+};
 
     /*if (n == 0) { return nullptr; }
       if (n > static_cast<size_t>(-1) / sizeof(T)) {
