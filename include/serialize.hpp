@@ -148,10 +148,10 @@ namespace Serialize{
       b64raw.reserve(data.size());
       char* dat = (char*)data.c_str();
       for(un_size_t i = 0; i < data.size(); i++){
-        char ans = detail::numtable[(size_t)dat[i]];
+        unsigned char ans = detail::numtable[(size_t)dat[i]];
         //      printf("I: %d, %c\n", ans, data[i]);
-        if(ans == SRLS_EQ_ESCAPE_CODE) break;
-        if(ans == 255){
+        if(ans == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
+        if(ans == (unsigned char)(255)){
           //        printf("illegal char: %d, idx: %d\n", dat[i],i);
           return std::vector<char>();
         };
@@ -162,8 +162,8 @@ namespace Serialize{
       un_size_t nextemptyidx  = 0;
       std::vector<char> output;
       output.reserve((data.size()/4)*3); //the b64 array is a multiple of 4
-      for(char byte : b64raw){
-        if(byte==SRLS_EQ_ESCAPE_CODE) break;
+      for(unsigned char byte : b64raw){
+        if(byte == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
         switch(cur64idx % 4){
         case 0:
           output.push_back(0);

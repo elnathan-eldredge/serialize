@@ -2,17 +2,7 @@
 <html>
     <body>
 	<script src="a.out.js"></script>
-	<script>
-	  Module.onRuntimeInitialized = async () => {
-	      console.log("beginapi");
-	      const api = {
-		  working: Module.cwrap("healthcheck", "number", []),
-                  add: Module.cwrap("sum", "number", ["number", "number"]),
-	      };
-	      console.log(api.working());
-              console.log(api.add);
-	  };
-	</script>
+	<script src="serialize.js"></script>
     </body>
 </html>
 
