@@ -6,7 +6,8 @@
 #include <emscripten.h>
 
 #include <vector>
-#include <unordered_map>
+//#include <unordered_map>
+#include <set>
 //#include <map>
 
 //#include <new> // bad_alloc, bad_array_new_length
@@ -50,12 +51,12 @@ extern "C" {
   int versiont(){
     emscripten_run_script("alert('0')");
     std::vector<char, Mallocator<char>> str;
-    std::unordered_map<char, char, std::hash<char>, std::equal_to<char>, Mallocator<std::pair<const char, char>>> mapc;
+    std::multiset<char, std::less<char>, Mallocator<char>> set;
     emscripten_run_script("alert('1')");
     str.push_back(*"a");
-    mapc[1] = 2;
+    set.insert(3);
     emscripten_run_script("alert('2')");
-    return str[0];
+    return str[0] + set.count(3);
   }
 
   /*  EMSCRIPTEN_KEEPALIVE
