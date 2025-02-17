@@ -220,7 +220,7 @@ Deserialize from a human-readable notation.
 
 ### Bug tracker:
 
-https://github.com/RawSteak0/serialize/issues
+[https://github.com/RawSteak0/serialize/issues](https://github.com/elnathan-eldredge/serialize/issues)
 Please submit issues after reading prior issues to avoid duplicating.
 
 ### Example:t
