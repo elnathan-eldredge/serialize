@@ -34,6 +34,8 @@ See also https://unlicense.org/
 May 27, 2024
 */
 
+// The c version of certain libraries are used
+// because they provide better RAII controll
 #include <cstdint>
 #include <istream>
 #include <unordered_map>
@@ -46,6 +48,7 @@ May 27, 2024
 #include <string.h>
 
 #define EE_Serialize
+
 //this definition is limited to this file, to ensure cross-compatibility with system bitness.
 #define un_size_t uint64_t
 
@@ -81,9 +84,9 @@ May 27, 2024
 #define bp(k)   \
   printf("Breakpoint: %s\n",k);
 
-//If the base54 library has already been included, the programmer
-// has the option to not include the internal implementation.
-
+// If the base64 library has already been included, the programmer
+//  has the option to not include the internal implementation to
+//  reduce the object code size by a small amount
 #ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
   namespace base64{
@@ -258,7 +261,7 @@ namespace Serialize{
     return data_invert;
   }
 
-  //helper function
+  //helper function because according to spec, the [] operator inserts an element
   template<typename T>
   bool exists_key(std::unordered_map<std::string,T>* map, std::string key){
     return map->find(key) != map->end();
@@ -307,7 +310,8 @@ namespace Serialize{
     ~SizedBlock();
 
   };
-  
+
+  // This data structure represents a serization
   class CompoundNode {
   public:
     std::unordered_map<std::string,SizedBlock*> generic_tags;
@@ -382,7 +386,6 @@ namespace Serialize{
   };
 
   //these functions prepended with the underscore are not for public use, as segfaults may happen with improper use
-  
   void _skip_to_flag(char flag, std::vector<char>* data, un_size_t* index, un_size_t offset){
     *index -= 1;
     while((*data)[++*index] != flag && (*index) < data->size()){}
@@ -428,8 +431,7 @@ namespace Serialize{
     *index += offset;
   }
 
-  //All parsing functions require a "\0" at the end
-  
+  //All parsing functions require a "\0" to signal end-of-data
   bool _parse_next_enquoted_string(std::vector<char>* data, un_size_t* idx,
                               std::string* str) {
     str->clear();
@@ -690,7 +692,9 @@ namespace Serialize{
     return deserialize_readable(&vec, 0, &t);
   }
 
-  SizedBlock *_parse_value_h(std::vector<char> *vdata, un_size_t *idx) { //needs some drying as well
+  // before releasing, wrap parsing expressions in template
+  
+  SizedBlock *_parse_value_h(std::vector<char> *vdata, un_size_t *idx) { 
     SizedBlock* block = new SizedBlock;
     char* data = vdata->data();
     switch (data[*idx]) {

@@ -23,11 +23,11 @@ template <class T> struct Mallocator {
   T * allocate(const size_t n) const {
     if (n == 0) { return nullptr; }
     if (n > static_cast<size_t>(-1) / sizeof(T)) {
-      //      throw std::bad_array_new_length();
+      //    throw std::bad_array_new_length();
       return nullptr;
     }
     void * const pv = malloc(n * sizeof(T));
-    if (!pv) { return nullptr;}// throw std::bad_alloc(); }
+    if (!pv) { return nullptr; }//throw std::bad_alloc(); }
     return static_cast<T *>(malloc(n));
   }
   void deallocate(T * const p, size_t) const noexcept {
@@ -38,12 +38,13 @@ template <class T> struct Mallocator {
     /*if (n == 0) { return nullptr; }
       if (n > static_cast<size_t>(-1) / sizeof(T)) {
           throw std::bad_array_new_length();
-      }
+      }n
       void * const pv = malloc(n * sizeof(T));
       if (!pv) { throw std::bad_alloc(); }*/
 //using namespace Serialize;
 
-//std::vector<int> nodes;
+// std::vector<int> nodes;
+
 
 
 extern "C" {

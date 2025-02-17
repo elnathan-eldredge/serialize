@@ -25,14 +25,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 
+/*
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <stddef.h>
+#include <stddef.h>*/
 #include "hashmap.h"
 
-#define GROW_AT   0.40 /* 60% */
+#define GROW_AT   0.40 /* 40% */
 #define SHRINK_AT 0.10 /* 10% */
 
 #ifndef HASHMAP_LOAD_FACTOR
