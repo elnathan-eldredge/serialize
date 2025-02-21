@@ -1,10 +1,5 @@
-Module.onRuntimeInitialized = async () => {
-    console.log("beginapi");
-    const api = {
-	version: Module.cwrap("versiont", "number", []),
-//	test: Module.cwrap("test", "number", []),
-    };
-    console.log(api.version());
-    //    console.log(api.tmalloc());
-//    var t = Module.test();
+let is_big_endian = () => {
+    let uInt32 = new Uint32Array([0x01000000]);
+    let uInt8 = new Uint8Array(uInt32.buffer);
+    return uInt8[0] == 0x01;
 };
