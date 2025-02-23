@@ -7,8 +7,13 @@ console.log(arr1,arr2,arr3)
 invert_endian(arr2,arr2.BYTES_PER_ELEMENT)
 console.log(arr1,arr2,arr3)
 
-let block = new SizedBlock(2, new Uint16Array([0x04,0x03,0x02,0x01]));
-
+let block = new SizedBlock(2, new Uint16Array([0x04,0x03,0x02,0x01,0x011,0x12]));
 console.log(block);
+let lowered = block.lower()
+console.log(lowered)
+block.upper(lowered);
+console.log(block);
+let block2 = new SizedBlock();
+block.copy_to(block2);
+console.log(block2);
 
-console.log(block.lower())

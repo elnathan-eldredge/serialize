@@ -91,14 +91,17 @@ const  SB_FLAG_STRING = "s".charCodeAt(0)
 
 class SizedBlock{
     contents_native = new Uint8Array();
-    element_span;
-    span;
-    meta;
+    element_span = 0;
+    span = 0;
+    meta = 0;
 
     constructor(element_size, typedarray){
+        if(element_size == undefined && typedarray == undefined)
+            return;
         this.contents_native = new Uint8Array(typedarray.buffer.slice());
         this.element_span = element_size
         this.span = this.contents_native.byteLength
+        this.meta = 1;
     }
 
     lower(){
@@ -109,7 +112,9 @@ class SizedBlock{
         let span_a = new Uint8Array(span_b.buffer)
         let elemspan_a = new Uint16Array([this.element_span]);
         let meta_a = new Uint8Array([this.meta]);
+        invert_endian(meta_a,1);
         invert_endian(span_a,8);
+        invert_endian(elemspan_a,2);
         enforce_endian(meta_a,1);
         enforce_endian(elemspan_a,2);
         enforce_endian(span_a,8);
@@ -118,6 +123,7 @@ class SizedBlock{
                                     + elemspan_a.byteLength
                                     + span_a.byteLength
                                     + contents_little.byteLength);
+        result.set(meta_a);
         result.set(new Uint8Array(elemspan_a.buffer), meta_a.byteLength);
         result.set(new Uint8Array(span_a.buffer), meta_a.byteLength + elemspan_a.byteLength);
         result.set(contents_little, meta_a.byteLength + elemspan_a.byteLength + span_a.byteLength);
@@ -125,18 +131,117 @@ class SizedBlock{
     }
 
     upper(uint8array, startindex){
+        this.dump();
+        startindex = startindex==undefined?0:startindex;
         let errcannot = new Error("SizedBlock.upper: error deserializing")
         if(uint8array.byteLength <= 11)
             throw errcannot;
+        let meta_a = new Uint8Array(uint8array.slice(startindex,startindex+1).buffer);
+        let elemspan_a = new Uint16Array(uint8array.slice(startindex+1,startindex+3).buffer);
+        let span_a = new BigUint64Array(uint8array.slice(startindex+3,startindex+11).buffer);
+        invert_endian(meta_a,1);
+        invert_endian(span_a,8);
+        invert_endian(elemspan_a,2);
+        enforce_endian(meta_a, 1);
+        enforce_endian(elemspan_a, 2);
+        enforce_endian(span_a, 8);
+        this.meta = meta_a[0];
+        this.element_span = elemspan_a[0];
+        this.span = Number(span_a[0]);
+        if(this.span > (uint8array.bytelength - 11 - startindex)){
+            dump();
+            throw errcannot;
+        }
+        let contents_little = uint8array.slice(startindex + 11);
+        enforce_endian(contents_little);
+        this.contents_native = contents_little;
     }
 
-    dump(){};
+    dump(){
+        if(this.isdumped())
+            return;
+        this.contents_native = new Uint8Array();
+        this.element_span = 0;
+        this.span = 0;
+        this.meta = 0;        
+    };
 
-    copy_to(target){};
+    copy_to(target){
+        target.span = this.span;
+        target.element_span = this.element_span;
+        target.meta = this.meta;
+        target.contents_native = new Uint8Array(this.contents_native.buffer.slice())
+    };
     
-    assign_meta(meta){};
+    assign_meta(meta){
+        this.meta = meta;
+    };
 
     isdumped(){return this.span==0};
    
 }
 
+/*
+  class CompoundNode {
+  public:
+    std::unordered_map<std::string,SizedBlock*> generic_tags;
+    std::unordered_map<std::string,CompoundNode*> child_nodes;
+    std::unordered_map<std::string,std::vector<CompoundNode*>> child_node_lists;
+
+    CompoundNode(){};
+
+    template<typename T> SizedBlock* put(std::string key, T var);
+    template<typename T> SizedBlock* put_string(std::string key, un_size_t amount, T* vars);
+    template<typename T> SizedBlock* put_string(std::string key, std::vector<T>& vars);
+
+    void put(std::string key, CompoundNode& node);
+    void put(std::string key, std::vector<CompoundNode*>& nodes);
+    void put_back(std::string key, CompoundNode& node);
+
+    template<typename T> bool has_compat(std::string key);
+    template<typename T> bool has_compat_string(std::string key);
+    bool has_node(std::string key);
+    bool has_node_list(std::string key);
+
+    template<typename T> T get(std::string key);
+    template<typename T> std::vector<T> get_string(std::string key);
+    template<typename T> T* get_ref(std::string key);
+    un_size_t get_string_length(std::string key);
+
+    CompoundNode* get_node(std::string key);
+    std::vector<CompoundNode*> get_node_list(std::string key);
+    un_size_t get_node_list_length(std::string key);
+
+    void copy_to(CompoundNode* node);
+    
+    void burninate_generic_if_exists(std::string key);
+
+    std::string similair_json();
+
+    bool operator[](std::string key);
+
+    std::vector<char> serialize();
+    std::string serialize_encode();
+    std::string serialize_readable(bool omit_undefined);
+
+    bool deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index);
+    bool decode_deserialize(std::string data);
+    bool deserialize_readable(std::string data);
+
+  private:
+    bool deserialize_readable(std::vector<char> *data, un_size_t start_index,
+                              un_size_t *end_index);
+
+  public:
+    
+    ~CompoundNode();
+
+    void destroy_children();
+  };
+*/
+
+class CompoundNode{
+    generic_tags = {};
+    child_nodes = {};
+    child_node_lists = {};
+}

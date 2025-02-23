@@ -1010,42 +1010,42 @@ namespace Serialize{
     return true;
   }
 
-  std::string CompoundNode::serialize_readable(bool omit_undefined) { //Can't think of varnames 
-    std::string d = "{ ";
+  std::string CompoundNode::serialize_readable(bool omit_undefined) {
+    std::string serialization = "{ ";
     un_size_t loop = 0;
     for (std::pair<std::string, SizedBlock*> pair : generic_tags) {
-      d += "\"";
-      d += _add_escapes_to_string_readable(pair.first);
-      d += "\" : ";
-      d += _value_string(pair.second);
+      serialization += "\"";
+      serialization += _add_escapes_to_string_readable(pair.first);
+      serialization += "\" : ";
+      serialization += _value_string(pair.second);
       if (++loop < generic_tags.size() || !child_nodes.empty() || !child_node_lists.empty())
-        d += ", ";
+        serialization += ", ";
     }
     loop = 0;
     for (std::pair<std::string, CompoundNode *> pair : child_nodes) {
-      d += "\"";
-      d += _add_escapes_to_string_readable(pair.first);
-      d += "\" : ";
-      d += pair.second->serialize_readable(omit_undefined);
+      serialization += "\"";
+      serialization += _add_escapes_to_string_readable(pair.first);
+      serialization += "\" : ";
+      serialization += pair.second->serialize_readable(omit_undefined);
       if (++loop < child_nodes.size() || !child_node_lists.empty())
-        d += ", ";
+        serialization += ", ";
     }
     loop = 0;
     for (std::pair <std::string,std::vector<CompoundNode *>> pair : child_node_lists) {
-      d += "\"";
-      d += _add_escapes_to_string_readable(pair.first);
-      d += "\" : [";
+      serialization += "\"";
+      serialization += _add_escapes_to_string_readable(pair.first);
+      serialization += "\" : [";
       un_size_t loop2 = 0;
       for (CompoundNode *inode : pair.second) {
-        d += inode->serialize_readable(omit_undefined);
+        serialization += inode->serialize_readable(omit_undefined);
         if (++loop2 < pair.second.size())
-          d += ", ";
+          serialization += ", ";
       }
-      d += "]";
+      serialization += "]";
       if (++loop < child_node_lists.size())
-        d += ", ";
+        serialization += ", ";
     }
-    d += "}";
+    serialization += "}";
     return d;
   }
 
