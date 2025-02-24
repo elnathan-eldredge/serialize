@@ -101,7 +101,6 @@ class SizedBlock{
         this.contents_native = new Uint8Array(typedarray.buffer.slice());
         this.element_span = element_size
         this.span = this.contents_native.byteLength
-        this.meta = 1;
     }
 
     lower(){
@@ -115,6 +114,7 @@ class SizedBlock{
         invert_endian(meta_a,1);
         invert_endian(span_a,8);
         invert_endian(elemspan_a,2);
+        invert_endian(contents_little,this.element_span);
         enforce_endian(meta_a,1);
         enforce_endian(elemspan_a,2);
         enforce_endian(span_a,8);
@@ -244,4 +244,152 @@ class CompoundNode{
     generic_tags = {};
     child_nodes = {};
     child_node_lists = {};
+
+    constructor(){};
+
+    put(key, value, bytesperelement, arraytype){
+        let sb;
+        switch(typeof(value)){
+        case "object":{
+            if(!ArrayBuffer.isView(value))
+                throw new Error("CompoundNode.put : if object, value must be typed array")
+            sb = new SizedBlock(bytesperelement!=undefined?bytesperelement:value.BYTES_PER_ELEMENT, value);
+            break;
+        }
+        case "bigint":{
+            sb = new SizedBlock(8,new BigInt64Array([value]));
+            break;
+        }
+        case "number":{
+            if(arraytype==undefined)
+                throw new Error("CompoundNode.put : array type reqired for insertion of number values");
+            sb = new SizedBlock(arraytype.BYTES_PER_ELEMENT,new arraytype([value]));
+            break;
+        }
+        case "string":{
+            sb = new SizedBlock(1,new Uint8Array(value.split("").map(x=>x.charCodeAt())));
+            break;
+        }
+        case "boolean":{
+            sb = new SizedBlock(1,new Uint8Array([value?1:0]));
+            break;
+        }
+        default:{
+            throw new Error("CompoundNode.put : cannot insert variables of type: " + typeof(value));
+            break;
+        }
+        }
+        this.generic_tags[key] = sb;
+        return sb;
+    }
+    put_node(key, node_or_array){
+        if(typeof(node_or_array) == "object"){
+            let ncn = new CompoundNode()
+            node_or_array.copy_to(ncn);
+            this.child_nodes[key] = ncn;
+            return;
+        }
+        child_node_lists[key] = []
+        for (let node in node_or_array){
+            let ncn = new CompoundNode();
+            code.copy_to(ncn);
+            child_node_lists[key].push(node_or_array);
+        }
+        return node_or_array
+    }
+    put_back(key, node){
+        if(this.child_node_lists[key] == undefined)
+            this.child_node_lists[key] = [];
+        let ncn = new CompoundNode();
+        node.copy_to(ncn);
+        this.child_node_lists[key].push(ncn);
+        return ncn
+    }
+
+    has_compat(key, arrtype){
+        console.log(arrtype)
+        if(this.generic_tags[key] == undefined)
+            return false;
+        if(this.generic_tags[key].span != typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT)
+            return false;
+        return true;
+    }
+    has_compat_array(key, arrtype){
+        if(this.generic_tags[key] == undefined)
+            return false;
+        if(this.generic_tags[key].element_span != typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT)
+            return false;
+        return true;
+    }
+    has_node(key){
+        return this.child_nodes[key]!=undefined;
+    }
+    has_node_list(key){
+        return this.child_node_lists[key]!=undefined;
+    }
+
+    get(key, optionalcast){
+        if(!this.has_compat_array(key,optionalcast!=undefined?optionalcast.BYTES_PER_ELEMENT:1))
+            return undefined;
+        let contents = this.generic_tags[key].contents_native.buffer.slice();
+        if(optionalcast != undefined)
+            return new optionalcast(contents);
+        return new Uint8Array(contents);
+    }
+    get_ref(key, optionalcast){
+        if(!this.has_compat_array(key,optionalcast!=undefined?optionalcast.BYTES_PER_ELEMENT:1))
+            return undefined;
+        if(optionalcast != undefined)
+            return new optionalcast(this.generic_tags[key].contents_native.buffer)
+        return new Uint8Array(this.generic_tags[key].contents_native.buffer)
+    }
+    get_node(key){
+        return this.child_nodes[key]
+    }
+    get_node_list(key){
+        return this.child_node_lists[key]
+    }
+
+    copy_to(target){
+        target.destroy_children()
+        for(let key in this.generic_tags){
+            let nsb = new SizedBlock();
+            this.generic_tags[key].copy_to(nsb);
+            target.generic_tags[key] = nsb;
+        }
+        for(let key in this.child_nodes){
+            let ncn = new CompoundNode();
+            this.child_nodes[key].copy_to(ncn);
+            target.child_nodes[key] = ncn;
+        }
+        for(let key in this.child_node_lists){
+            target.child_node_lists[key] = [];
+            let list = this.child_node_lists[key];
+            for(let lnode in list){
+                let ncn = new CompoundNode();
+                lnode.copy_to(ncn);
+                target.child_node_lists[key].push(ncn);
+            }
+        }
+    }
+
+    has_symbol(key){
+        return this.generic_tags[key]!=undefined||
+            this.child_nodes[key]!=undefined||
+            this.child_node_lists[key]!=undefined;
+    }
+
+    serialize(){}
+    serialize_encode(){}
+    serialize_readable(){}
+
+    deserialize(content){}
+    deserialize_decode(content){}
+    deserialize_readable(content){}
+
+    destroy_children(){
+        this.generic_tags = {};
+        this.child_nodes = {};
+        this.child_node_lists = {};
+    }
 }

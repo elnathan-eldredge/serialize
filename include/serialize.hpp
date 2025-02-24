@@ -373,6 +373,7 @@ namespace Serialize{
     std::string serialize_readable(bool omit_undefined);
 
   private:
+
     bool deserialize_readable(std::vector<char> *data, un_size_t start_index,
                               un_size_t *end_index);
 
@@ -1043,9 +1044,9 @@ namespace Serialize{
       }
       serialization += "]";
       if (++loop < child_node_lists.size())
-        serialization += ", ";
+        d += ", ";
     }
-    serialization += "}";
+    d += "}";
     return d;
   }
 
