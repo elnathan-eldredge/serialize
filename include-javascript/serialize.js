@@ -1,3 +1,5 @@
+let SERIALIZE_NORESERVE = true
+
 let is_big_endian = () => {
     let uInt32 = new Uint32Array([0x01000000]);
     let uInt8 = new Uint8Array(uInt32.buffer);
@@ -55,6 +57,51 @@ const  SB_FLAG_DOUBLE = "d".charCodeAt(0)
 const  SB_FLAG_LONG_DOUBLE = "q".charCodeAt(0)
 const  SB_FLAG_BOOLEAN = "n".charCodeAt(0)
 const  SB_FLAG_STRING = "s".charCodeAt(0)
+
+/*vector*/
+
+class uVector{
+    constructor(data){
+        this.data = data==undefined?new Uint8Array():new Uint8Array(data.buffer.slice());
+        this.size = data==undefined?0:data.byteLength;
+    }
+    reserve(num){
+        if(typeof(num) != "number")
+            throw new Error("uVector: reserve: must be number")
+        let arr = new Uint8Array(num);
+        arr.set(this.data.slice(0,Math.min(this.data.byteLength,num)))
+        this.data = arr;
+    }
+    push_back(uint){
+        if(typeof(uint) != "number")
+            throw new Error("uVector: reserve: must be number")
+        if(this.size + 1 > this.data.byteLength)
+            this.reserve(this.data.byteLength*2+1)
+        this.data[this.size] = uint;
+        this.size++;
+    }
+    insert_back(arr){
+        if(!ArrayBuffer.isView(arr))
+            throw new Error("uVector: insert: must be typed array");
+        if(this.size + arr.byteLength >= this.data.byteLength)
+            this.reserve(Math.max(this.data.byteLength*2,this.size+arr.byteLength))
+        this.data.set(arr.slice(),this.size)
+        this.size += arr.byteLength;
+    }
+    shrink_to_fit(){
+        this.reserve(this.size)
+    }
+    array(){
+        return this.data
+    }
+    used(){
+        return this.size
+    }
+    clear(){
+        this.data = new Uint8Array();
+        this.size = 0;
+    }
+}
 
 /*
   class SizedBlock{
@@ -240,6 +287,10 @@ class SizedBlock{
   };
 */
 
+let _add_escapes_to_string = (str) => {
+    return str.replace('"', '\\"')
+}
+
 class CompoundNode{
     generic_tags = {};
     child_nodes = {};
@@ -307,7 +358,6 @@ class CompoundNode{
     }
 
     has_compat(key, arrtype){
-        console.log(arrtype)
         if(this.generic_tags[key] == undefined)
             return false;
         if(this.generic_tags[key].span != typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT)
@@ -379,7 +429,42 @@ class CompoundNode{
             this.child_node_lists[key]!=undefined;
     }
 
-    serialize(){}
+    serialize(){
+        let arr = new uVector();
+        SERIALIZE_NORESERVE = false
+        if(!SERIALIZE_NORESERVE)
+            arr.reserve(8192);
+        arr.push_back(COMPOUND_NODE_BEGIN_FLAG);
+        for(const key in this.generic_tags){
+            let esc = _add_escapes_to_string(key);
+            arr.push_back(COMPOUND_NODE_BEGIN_STRING_FLAG);
+            arr.insert_back(Uint8Array.from(esc.split("").map(x => x.charCodeAt())));
+            arr.push_back(COMPOUND_NODE_BEGIN_ELEMENT_FLAG);
+            arr.push_back(COMPOUND_NODE_BEGIN_BLOCK_FLAG);
+            arr.insert_back(this.generic_tags[key].lower());
+        }
+        for(const key in this.child_nodes){
+            let esc = _add_escapes_to_string(key);
+            arr.push_back(COMPOUND_NODE_BEGIN_STRING_FLAG);
+            arr.insert_back(Uint8Array.from(esc.split("").map(x => x.charCodeAt())));
+            arr.push_back(COMPOUND_NODE_BEGIN_ELEMENT_FLAG);
+            arr.insert_back(this.child_nodes[key].serialize());
+        }
+        for(const key in this.child_node_lists){
+            let esc = _add_escapes_to_string(key);
+            arr.push_back(COMPOUND_NODE_BEGIN_STRING_FLAG);
+            arr.insert_back(Uint8Array.from(esc.split("").map(x => x.charCodeAt())));
+            arr.push_back(COMPOUND_NODE_BEGIN_ELEMENT_FLAG);
+            arr.push_back(COMPOUND_NODE_BEGIN_LIST_FLAG);
+            for (let n = 0; n < this.child_node_lists[key].length; n ++){
+                arr.insert_back(this.child_node_lists[key][n].serialize())
+            }
+            arr.push_back(COMPOUND_NODE_END_LIST_FLAG);
+        }
+        arr.push_back(COMPOUND_NODE_END_FLAG);
+        arr.shrink_to_fit()
+        return arr.array()
+    }
     serialize_encode(){}
     serialize_readable(){}
 

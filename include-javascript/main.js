@@ -69,4 +69,6 @@ console.log(node.has_node("nonexistant"),
 console.log(node.get("keyforfloat64array",Float64Array),
             node.get("keyforuint16array",Uint32Array));
 console.log(node);
+console.log("serialization: ", node.serialize())
+
 
