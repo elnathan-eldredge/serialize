@@ -35,16 +35,17 @@ May 27, 2024
 */
 
 // The c version of certain libraries are used
-// because they provide better RAII controll
-#include <cstdint>
-#include <istream>
+// because they provide more meticulous RAII control
+//#include <cstdint>
+//#include <istream>
 #include <unordered_map>
 #include <string>
-#include <cstring>
+//#include <cstring>
 #include <iostream>
 #include <vector>
-#include <algorithm>
+//#include <algorithm>
 #include <string>
+#include <stack>
 #include <string.h>
 
 #define EE_Serialize
@@ -59,6 +60,16 @@ May 27, 2024
 #define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)45
 #define COMPOUND_NODE_BEGIN_LIST_FLAG (char)91
 #define COMPOUND_NODE_END_LIST_FLAG (char)93
+
+#define COMPOUND_NODE_BEGIN_FLAG_R *"{"
+#define COMPOUND_NODE_BEGIN_STRING_R *"\""
+#define COMPOUND_NODE_END_STRING_R *"\""
+#define COMPOUND_NODE_ESCAPE_STRING_R *"\\"
+#define COMPOUND_NODE_END_R *"}"
+#define COMPOUND_NODE_KEY_VALUE_SEPERATOR *":"
+#define COMPOUND_NODE_BEGIN_ARRAY_R *"["
+#define COMPOUND_NODE_END_ARRAY_R *"]"
+#define COMPOUND_NODE_ITEM_SEPERATOR_R *","
 
 #define SB_META_UNDEFINED 0
 #define SB_META_INT_STYLE 1
@@ -84,9 +95,8 @@ May 27, 2024
 #define bp(k)   \
   printf("Breakpoint: %s\n",k);
 
-// If the base64 library has already been included, the programmer
-//  has the option to not include the internal implementation to
-//  reduce the object code size by a small amount
+// The programmer has the option to not include the internal
+// implementation of the base64 translater
 #ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
   namespace base64{
@@ -320,6 +330,8 @@ namespace Serialize{
 
     CompoundNode(){};
 
+    bool empty();
+
     template<typename T> SizedBlock* put(std::string key, T var);
 
     template<typename T> SizedBlock* put_string(std::string key, un_size_t amount, T* vars);
@@ -385,6 +397,10 @@ namespace Serialize{
 
     void destroy_children();
   };
+
+  bool CompoundNode::empty() {
+    return child_nodes.empty() && generic_tags.empty() && child_node_lists.empty();
+  }
 
   //these functions prepended with the underscore are not for public use, as segfaults may happen with improper use
   void _skip_to_flag(char flag, std::vector<char>* data, un_size_t* index, un_size_t offset){
@@ -1044,10 +1060,10 @@ namespace Serialize{
       }
       serialization += "]";
       if (++loop < child_node_lists.size())
-        d += ", ";
+        serialization += ", ";
     }
-    d += "}";
-    return d;
+    serialization += "}";
+    return serialization;
   }
 
   bool CompoundNode::decode_deserialize(std::string data){
@@ -1482,12 +1498,595 @@ namespace Serialize{
     meta = value;
   }
 
-  SizedBlock::~SizedBlock(){
-      dump();
-  }
+  SizedBlock::~SizedBlock() { dump(); }
 
+  #define PUSHDOWN_PARSER_TOKEN_WARNING_LENGTH_R 256
 
-}
+  //Pushdown automaton parser
+  namespace Readable {
+
+    enum ParserState {
+      AwaitStart,                       //0
+      AwaitKey,                         //1
+      ConstructKey,                     //2 
+      ConstructKeyEscape,               //3
+      AwaitKeyValueSeperator,           //4
+      AwaitValueTypeIdentifier,         //5
+      AwaitValue,                       //6
+      ConstructValueStringEscape,       //7
+      ConstructValueString,             //8
+      AwaitValueParsable,               //9
+      ConstructValueParsable,           //10
+      AwaitValueParsableSeperator,      //11
+      ConstructNodeArrayAwaitNode,      //12
+      ConstructNodeArrayAwaitSeperator, //13
+      AwaitItemSeperator,               //14
+      Success,                          //15
+      Error,                            //16
+      Warning                           //17
+    };
+
+    ParserState get_value_type_state(char c);
+    bool is_appropriate_value_start(char c, char ident);
+
+    struct ParserData {
+      ParserState current_state = AwaitStart;
+      ParserState next_state = Error;
+      CompoundNode *node = NULL;
+      std::string current_construction = "";
+      char current_value_type = 0;
+      std::string current_key = "";
+      std::vector<std::string> value_constructions = std::vector<std::string>();
+    };
+
+    ParserData fresh_parser_data_h();
+    void clean_parser_data(ParserData *);
+    ssize_t elem_size(char);
+    bool parse_insert_generic(CompoundNode*,std::string key,std::vector<std::string>,char);
+    
+    class PushdownParser {
+    public:
+      
+      std::stack<ParserData> state_stack;
+      ParserData state;
+
+      PushdownParser();
+
+      ParserState consume(char c);
+
+      ~PushdownParser();
+    };
+
+    ParserState PushdownParser::consume(char c) {
+
+      switch (state.current_state) {
+
+      // The user's program shoud pause parsing for a warning
+      // to prevent possible buffer overflow. The warning state
+      // is reached only through attempting to parse unreasonably
+      // long tokens. The previous state before the warning is
+      // stored in state.next_state
+      case Warning: {
+        state.current_state = Error;
+      }
+
+      case AwaitValueParsableSeperator: {
+        if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+          state.current_state = AwaitValueParsable;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_ARRAY_R) {
+          state.value_constructions.push_back(state.current_construction);
+          state.current_construction = "";
+          if (!parse_insert_generic(state.node, state.current_key,
+                                    state.value_constructions,
+                                    state.current_value_type)) {
+            state.current_state = Error;
+            state.value_constructions.clear();
+            break;
+          }
+          state.current_state = AwaitItemSeperator;
+          state.value_constructions.clear();
+          break;
+        }
+        if (!_is_ascii_whitespace(c)) {
+          state.current_state = Error;
+          break;
+        }
+      }
+        
+      case ConstructValueParsable: {
+        if (c == COMPOUND_NODE_END_ARRAY_R) {
+          state.value_constructions.push_back(state.current_construction);
+          state.current_construction = "";
+          if (!parse_insert_generic(state.node, state.current_key,
+                                    state.value_constructions,
+                                    state.current_value_type)) {
+            state.current_state = Error;
+            state.value_constructions.clear();
+            break;
+          }
+          state.current_state = AwaitItemSeperator;
+          state.value_constructions.clear();
+          break;
+        }
+        if (_is_ascii_whitespace(c)) {
+          state.value_constructions.push_back(state.current_construction);
+          state.current_construction = "";
+          state.current_state = AwaitValueParsableSeperator;
+          break;
+        }
+        if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+          state.value_constructions.push_back(state.current_construction);
+          state.current_construction = "";
+          state.current_state = AwaitValueParsable;
+          break;
+        }
+        if (state.current_construction.size() >=
+            PUSHDOWN_PARSER_TOKEN_WARNING_LENGTH_R) {
+          state.next_state = state.current_state;
+          state.current_state = Warning;
+        }
+        state.current_construction += c;
+        break;
+      }
+
+      case AwaitValueParsable: {
+        if (c == COMPOUND_NODE_END_ARRAY_R) {
+          if (!state.value_constructions.empty()) {
+            state.current_state = Error;
+            break;
+          }
+          if (!parse_insert_generic(state.node, state.current_key,
+                                  std::vector<std::string>(), state.current_value_type)) {
+            state.current_state = Error;
+          } else {
+            state.current_state = AwaitItemSeperator;
+          }
+          break;
+        }
+        if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+          state.current_state = Error;
+          break;
+        }
+        if (!_is_ascii_whitespace(c)) {
+          state.current_state = ConstructValueParsable;
+          state.current_construction += c;
+        }
+        break;
+      }
+
+      case ConstructValueString: {
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_state = ConstructValueStringEscape;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.node->put_string<char>(state.current_key,
+                                 state.current_construction.size(),
+                                       (char*)state.current_construction.c_str());
+          state.current_key = "";
+          state.current_construction = "";
+          state.current_state = AwaitItemSeperator;
+          break;
+        }
+        state.current_construction += c;
+        break;
+      }
+        
+      case ConstructValueStringEscape: {
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.current_construction += c;
+          break;
+        }
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_construction += c;
+          break;
+        }
+        state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
+        state.current_construction += c;
+        state.current_state = ConstructValueString;
+        break;
+      }
+        
+      case AwaitValue: {
+        if (c == COMPOUND_NODE_BEGIN_ARRAY_R && state.current_value_type != SB_FLAG_STRING) {
+          state.current_state = AwaitValueParsable;
+          break;
+        }
+        if (c == COMPOUND_NODE_BEGIN_STRING_R && state.current_value_type == SB_FLAG_STRING) {
+          state.current_construction = "";
+          state.current_state = ConstructValueString;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+
+      case AwaitItemSeperator: {
+        if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+          state.current_state = AwaitKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_R && state_stack.empty()) {
+          state.current_state = Success;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_R && !state_stack.empty()) {
+          if (state_stack.top().current_state = AwaitItemSeperator) {
+            state_stack.top().node->put(state_stack.top().current_key, *state.node);
+            state_stack.top().current_key = "";
+          } else if (state_stack.top().current_state = ConstructNodeArrayAwaitSeperator) {
+            state_stack.top().node->put_back(state_stack.top().current_key, *state.node);            
+          }
+          clean_parser_data(&state);
+          state = state_stack.top();
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+
+      case ConstructNodeArrayAwaitSeperator: { 
+        if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+          state.current_state = ConstructNodeArrayAwaitNode;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_ARRAY_R) {
+          state.current_key = "";
+          state.current_state = AwaitItemSeperator;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+        
+      case ConstructNodeArrayAwaitNode: {
+        if (c == COMPOUND_NODE_END_ARRAY_R && state.node->get_node_list_length(state.current_key) == 0) {
+          state.current_key = "";
+          state.current_state = AwaitItemSeperator;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_FLAG_R){
+          state.current_state = ConstructNodeArrayAwaitSeperator;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKey;
+        }
+        if(!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+
+      case AwaitValueTypeIdentifier: {
+        state.current_state = get_value_type_state(c);
+        if (state.current_state == Error)
+          break;
+        if (state.current_state == AwaitValue)
+          state.current_value_type = c;
+        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          state.current_state = AwaitItemSeperator;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+          state.current_state = ConstructNodeArrayAwaitNode;
+          break;
+        }
+        break;
+      }
+        
+      case AwaitKeyValueSeperator: {
+        if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+          state.current_state = AwaitValueTypeIdentifier;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+        
+      case ConstructKeyEscape: {
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.current_construction += c;
+          state.current_state = ConstructKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_construction += c;
+          break;
+        }
+        state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
+        state.current_construction += c;
+        state.current_state = ConstructKey;
+        break;
+      }
+        
+      case ConstructKey: {
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.current_state = AwaitKeyValueSeperator;
+          state.current_key = state.current_construction;
+          state.current_construction = "";
+          break;
+        }
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_state = ConstructKeyEscape;
+          break;
+        }
+        state.current_construction += c;
+        break;
+      }
+        
+      case AwaitKey: {
+        if (c == COMPOUND_NODE_BEGIN_STRING_R) {
+          state.current_state = ConstructKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_R && state_stack.empty() && state.node->empty()) {
+          state.current_state = Success;
+          break;
+        }
+        if (c == COMPOUND_NODE_END_R && !state_stack.empty() && state.node->empty()) {
+          if (state_stack.top().current_state == AwaitItemSeperator){
+            state_stack.top().node->put(state_stack.top().current_key, state.node);
+          } else if (state_stack.top().current_state == ConstructNodeArrayAwaitSeperator) {
+            state_stack.top().node->put_back(state_stack.top().current_key, *state.node);
+          } else {
+            state.current_state = Error; //parent node was not in a valid state
+          }
+          clean_parser_data(&state); //destroy all heap allocations, if any
+          state = state_stack.top();
+          state_stack.pop();
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+          
+      case AwaitStart: {
+        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          state.current_state = AwaitKey;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
+      }
+          
+      default: {
+        state.current_state = Error;
+        break;
+      }
+
+      } // switch statment
+      
+      return state.current_state;
+    } // consume(char)
+
+    PushdownParser::PushdownParser() { state = fresh_parser_data_h(); };
+
+    PushdownParser::~PushdownParser() {
+      clean_parser_data(&state);
+      while (!state_stack.empty()) {
+        clean_parser_data(&state_stack.top());
+        state_stack.pop();
+      }
+    }
+
+    ssize_t elem_size(char flag){
+      switch (flag) {
+      case SB_FLAG_UNDEFINED:
+          return 1;
+        break;
+      case SB_FLAG_I8:
+        return sizeof(int8_t);
+        break;
+      case SB_FLAG_I16:
+        return sizeof(int16_t);
+          break;
+      case SB_FLAG_I32:
+        return sizeof(int32_t);
+          break;
+      case SB_FLAG_I64:
+        return sizeof(int64_t);
+        break;
+      case SB_FLAG_FLOAT:
+        return sizeof(float);
+        break;
+      case SB_FLAG_DOUBLE:
+        return sizeof(double);
+        break;
+      case SB_FLAG_LONG_DOUBLE:
+        return sizeof(long double);
+        break;
+      case SB_FLAG_BOOLEAN:
+        return sizeof(bool);
+        break;
+      case SB_FLAG_STRING:
+        return sizeof(char);
+        break;
+      }
+      return -1;
+    }
+
+    long long _safe_iparse(std::string str, bool *success) {
+      long long num;
+      try {
+        num = std::stoll(str);
+      } catch (std::exception e) {
+        *success = false;
+        return 0;
+      }
+      *success = true;
+      return num;
+    }
+
+    long double _safe_fparse(std::string str, bool *success) {
+      long double num;
+      try {
+        num = std::stold(str);
+      } catch (std::exception e) {
+        *success = false;
+        return 0;
+      }
+      *success = true;
+      return num;
+    }
+
+    template <typename T>
+    std::vector<T> _parse_ai(std::vector<std::string>& strings, bool *success) {
+      std::vector<T> parsed;
+      for (std::string parsable : strings) {
+        T num = (T)_safe_iparse(parsable, success);
+        if (!*success)
+          break;
+        parsed.push_back(num);
+      }
+      return parsed;
+    }
+
+    template <typename T>
+    std::vector<T> _parse_af(std::vector<std::string>& strings, bool *success) {
+      std::vector<T> parsed;
+      for (std::string parsable : strings) {
+        T num = (T)_safe_fparse(parsable, success);
+        if (!*success)
+          break;
+        parsed.push_back(num);
+      }
+      return parsed;
+    }
+
+    bool parse_insert_generic(CompoundNode *node, std::string key,
+                              std::vector<std::string> raw, char parse_type) {
+      switch (parse_type){
+      case SB_FLAG_UNDEFINED: {
+        std::vector<uint8_t> vec;
+        node->put_string<uint8_t>(key, vec);
+        return true;
+        break;
+      }
+      case SB_FLAG_I8: {
+        std::vector<int8_t> parsed; bool success;
+        parsed = _parse_ai<int8_t>(raw, &success);
+        if (!success) return false;
+        node->put_string<int8_t>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_I16: {
+        std::vector<int16_t> parsed; bool success;
+        parsed = _parse_ai<int16_t>(raw, &success);
+        if (!success) return false;
+        node->put_string<int16_t>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_I32: {
+        std::vector<int32_t> parsed; bool success;
+        parsed = _parse_ai<int32_t>(raw, &success);
+        if (!success) return false;
+        node->put_string<int32_t>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_I64: {
+        std::vector<int64_t> parsed; bool success;
+        parsed = _parse_ai<int64_t>(raw, &success);
+        if (!success) return false;
+        node->put_string<int64_t>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_FLOAT: {
+        std::vector<float> parsed; bool success;
+        parsed = _parse_af<float>(raw, &success);
+        if (!success) return false;
+        node->put_string<float>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_DOUBLE: {
+        std::vector<double> parsed; bool success;
+        parsed = _parse_af<double>(raw, &success);
+        if (!success) return false;
+        node->put_string<double>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_LONG_DOUBLE: {
+        std::vector<long double> parsed; bool success;
+        parsed = _parse_af<long double>(raw, &success);
+        if (!success) return false;
+        node->put_string<long double>(key, parsed);
+        return true;
+        break;
+      }
+      case SB_FLAG_BOOLEAN: {
+        std::vector<uint8_t> parsed;
+        for (std::string str : raw) {
+          if (str == "true"){
+            parsed.push_back(1);
+          } else if (str == "false") {
+            parsed.push_back(0);
+          } else {
+            return false;
+          }
+        }
+        node->put_string<uint8_t>(key, parsed);
+        return true;
+        break;
+      }
+      default:
+        break;
+      }
+      return false;
+    }
+
+    ParserData fresh_parser_data_h() {
+      return ParserData{.current_state = AwaitStart, .next_state = AwaitKey, .node = new CompoundNode(), .current_construction = "", .current_value_type = 0, .current_key = "", .value_constructions = std::vector<std::string>()};
+    }
+
+    void clean_parser_data(ParserData* data) {
+      if (data->node != NULL)
+        delete data->node;
+      data->node = NULL;
+    }
+
+    ParserState get_value_type_state(char c) {
+      ParserState state = Error;
+      if (c == SB_FLAG_UNDEFINED || c == SB_FLAG_I8 || c == SB_FLAG_I16 || c == SB_FLAG_I32 ||
+          c == SB_FLAG_I64 || c == SB_FLAG_FLOAT || c == SB_FLAG_DOUBLE ||
+          c == SB_FLAG_LONG_DOUBLE || c == SB_FLAG_BOOLEAN ||
+          c == SB_FLAG_STRING || c == COMPOUND_NODE_BEGIN_FLAG_R || c == COMPOUND_NODE_BEGIN_ARRAY_R)
+        state = AwaitValue;
+      if (_is_ascii_whitespace(c))
+        state = AwaitValueTypeIdentifier;
+      return state;
+    }
+
+    bool is_appropriate_value_start(char c, char ident) {
+      if ((ident == SB_FLAG_UNDEFINED || ident == SB_FLAG_I16 ||
+           ident == SB_FLAG_I32 || ident == SB_FLAG_I64 ||
+           ident == SB_FLAG_FLOAT || ident == SB_FLAG_DOUBLE ||
+           ident == SB_FLAG_LONG_DOUBLE || ident == SB_FLAG_BOOLEAN) &&
+          c == COMPOUND_NODE_BEGIN_ARRAY_R)
+        return true;
+      if ((ident == SB_FLAG_STRING) && c == COMPOUND_NODE_BEGIN_STRING_R)
+        return true;
+      return false;
+    }
+
+  } // namespace Readable
+
+} // namespace Serialize
+
 
 #undef un_size_t
 #undef _return_if_EOF

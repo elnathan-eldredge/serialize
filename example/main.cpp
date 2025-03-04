@@ -142,6 +142,16 @@ int main(){
     printf("cannot deserialize RSSF\n");
   }
 
+  Serialize::Readable::PushdownParser parser;
+  for (char c : serialized_hp) {
+    Serialize::Readable::ParserState state = parser.consume(c);
+    printf("%d \"%c\"\n",state,c);
+    if (state == Serialize::Readable::ParserState::Error) {
+      printf("Parser error.\n");
+      break;
+    }
+  }
+
   std::string invalid_code = "{\r\n"
    "\"incomplete\" : n";
 
