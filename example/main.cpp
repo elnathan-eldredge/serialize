@@ -142,6 +142,8 @@ int main(){
     printf("cannot deserialize RSSF\n");
   }
 
+  node.destroy_children();
+
   Serialize::Readable::PushdownParser parser;
   for (char c : serialized_hp) {
     Serialize::Readable::ParserState state = parser.consume(c);

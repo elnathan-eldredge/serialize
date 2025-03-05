@@ -36,14 +36,14 @@ May 27, 2024
 
 // The c version of certain libraries are used
 // because they provide more meticulous RAII control
-//#include <cstdint>
-//#include <istream>
+#include <cstdint>
+#include <istream>
 #include <unordered_map>
 #include <string>
-//#include <cstring>
+#include <cstring>
 #include <iostream>
 #include <vector>
-//#include <algorithm>
+#include <algorithm>
 #include <string>
 #include <stack>
 #include <string.h>
@@ -1377,10 +1377,11 @@ namespace Serialize{
       pair.second.clear();
     }
     child_node_lists.clear();
-    for(std::pair<std::string,SizedBlock*> pair: generic_tags){
-      delete pair.second;
+    for (std::pair<std::string, SizedBlock *> pair : generic_tags) {
+       printf("Generic tag %s of span %ld\n",pair.first.c_str(), pair.second->span);
+       delete pair.second;
     }
-    generic_tags.clear();
+    generic_tags = std::unordered_map<std::string, SizedBlock*>();
   }
 
   template<typename T>
@@ -1420,7 +1421,8 @@ namespace Serialize{
   
   void SizedBlock::copy_to(SizedBlock* block){
     block->dump();
-    if(!span) return;
+    block->contents_native = nullptr;
+    if(contents_native == nullptr) return;
     block->contents_native = malloc(span);
     memcpy(block->contents_native, contents_native, span);
     block->span = span;
@@ -1454,7 +1456,7 @@ namespace Serialize{
   }
 
   char* SizedBlock::upper(char* data, char* maxaddress){ //returns the address AFTER all the data used
-    if(span) dump();
+    if(contents_native != nullptr) dump();
     char* max = maxaddress + 1;
     if(max < data) return nullptr;
     if((uint64_t)(max - data) < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
@@ -1466,9 +1468,7 @@ namespace Serialize{
     span = little_endian<un_size_t>(total_size);
     char* data_after_header = data + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
     if((uint64_t)(max - data) < total_size + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)){
-      meta = 0;
-      span = 0;
-      element_span = 0;
+      dump();
       return nullptr;
     }
     if(is_big_endian()){
@@ -1486,7 +1486,7 @@ namespace Serialize{
   }
 
   void SizedBlock::dump(){
-    if(span == 0) return;
+    if(contents_native == nullptr) return;
     free(contents_native);
     contents_native = nullptr;
     span = 0;
@@ -1506,13 +1506,13 @@ namespace Serialize{
   namespace Readable {
 
     enum ParserState {
-      AwaitStart,                       //0
-      AwaitKey,                         //1
-      ConstructKey,                     //2 
-      ConstructKeyEscape,               //3
-      AwaitKeyValueSeperator,           //4
-      AwaitValueTypeIdentifier,         //5
-      AwaitValue,                       //6
+      AwaitStart,               // 0
+      AwaitKey,                 // 1
+      ConstructKey,             // 2
+      ConstructKeyEscape,       // 3
+      AwaitKeyValueSeperator,   // 4
+      AwaitValueTypeIdentifier, // 5
+      AwaitValue,               // 6
       ConstructValueStringEscape,       //7
       ConstructValueString,             //8
       AwaitValueParsable,               //9
@@ -1605,7 +1605,7 @@ namespace Serialize{
             state.current_state = Error;
             state.value_constructions.clear();
             break;
-          }
+           }
           state.current_state = AwaitItemSeperator;
           state.value_constructions.clear();
           break;
@@ -1637,12 +1637,15 @@ namespace Serialize{
             state.current_state = Error;
             break;
           }
+          printf("would've insertet empty generic\n");
           if (!parse_insert_generic(state.node, state.current_key,
-                                  std::vector<std::string>(), state.current_value_type)) {
+                                    std::vector<std::string>(),
+                                    state.current_value_type)) {
             state.current_state = Error;
           } else {
             state.current_state = AwaitItemSeperator;
           }
+          state.current_state = AwaitItemSeperator;
           break;
         }
         if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
@@ -1662,9 +1665,11 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_END_STRING_R) {
-          state.node->put_string<char>(state.current_key,
-                                 state.current_construction.size(),
-                                       (char*)state.current_construction.c_str());
+          printf("insert string %s\n",state.current_construction.c_str());
+          state.node->put_string<char>(
+              state.current_key, state.current_construction.size(),
+              (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
+          
           state.current_key = "";
           state.current_construction = "";
           state.current_state = AwaitItemSeperator;
@@ -1714,14 +1719,16 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_END_R && !state_stack.empty()) {
-          if (state_stack.top().current_state = AwaitItemSeperator) {
+          if (state_stack.top().current_state == AwaitItemSeperator) {
             state_stack.top().node->put(state_stack.top().current_key, *state.node);
-            state_stack.top().current_key = "";
-          } else if (state_stack.top().current_state = ConstructNodeArrayAwaitSeperator) {
-            state_stack.top().node->put_back(state_stack.top().current_key, *state.node);            
+          } else if (state_stack.top().current_state == ConstructNodeArrayAwaitSeperator) {
+            state_stack.top().node->put_back(state_stack.top().current_key, *state.node);
           }
           clean_parser_data(&state);
+          printf("pop from stack");
           state = state_stack.top();
+          state_stack.pop();
+          printf("popped node %s\n",state.node->serialize_readable(false).c_str());
           break;
         }
         if (!_is_ascii_whitespace(c))
@@ -1750,11 +1757,13 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
-        if(c == COMPOUND_NODE_BEGIN_FLAG_R){
+        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          printf("push to stack");
           state.current_state = ConstructNodeArrayAwaitSeperator;
           state_stack.push(state);
           state = fresh_parser_data_h();
           state.current_state = AwaitKey;
+          break;
         }
         if(!_is_ascii_whitespace(c))
           state.current_state = Error;
@@ -1768,6 +1777,8 @@ namespace Serialize{
         if (state.current_state == AwaitValue)
           state.current_value_type = c;
         if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          printf("push to stack");
+          printf("pushing node %s\n",state.node->serialize_readable(false).c_str());
           state.current_state = AwaitItemSeperator;
           state_stack.push(state);
           state = fresh_parser_data_h();
@@ -1833,15 +1844,17 @@ namespace Serialize{
         }
         if (c == COMPOUND_NODE_END_R && !state_stack.empty() && state.node->empty()) {
           if (state_stack.top().current_state == AwaitItemSeperator){
-            state_stack.top().node->put(state_stack.top().current_key, state.node);
+            state_stack.top().node->put(state_stack.top().current_key, *state.node);
           } else if (state_stack.top().current_state == ConstructNodeArrayAwaitSeperator) {
             state_stack.top().node->put_back(state_stack.top().current_key, *state.node);
           } else {
             state.current_state = Error; //parent node was not in a valid state
           }
-          clean_parser_data(&state); //destroy all heap allocations, if any
+          clean_parser_data(&state);
           state = state_stack.top();
+          printf("pop from stack");
           state_stack.pop();
+          printf("popped node %s\n",state.node->serialize_readable(false).c_str());
           break;
         }
         if (!_is_ascii_whitespace(c))
@@ -1872,8 +1885,13 @@ namespace Serialize{
     PushdownParser::PushdownParser() { state = fresh_parser_data_h(); };
 
     PushdownParser::~PushdownParser() {
+      printf("stack size at destruction%d\n", state_stack.size());
+      printf("current node: %s\n",
+             state.node->serialize_readable(false).c_str());
       clean_parser_data(&state);
       while (!state_stack.empty()) {
+        printf("stacked node: %s\n",
+               state_stack.top().node->serialize_readable(false).c_str());
         clean_parser_data(&state_stack.top());
         state_stack.pop();
       }
@@ -1919,7 +1937,7 @@ namespace Serialize{
       long long num;
       try {
         num = std::stoll(str);
-      } catch (std::exception e) {
+      } catch (std::exception& e) {
         *success = false;
         return 0;
       }
@@ -1931,7 +1949,7 @@ namespace Serialize{
       long double num;
       try {
         num = std::stold(str);
-      } catch (std::exception e) {
+      } catch (std::exception& e) {
         *success = false;
         return 0;
       }
@@ -1968,7 +1986,7 @@ namespace Serialize{
       switch (parse_type){
       case SB_FLAG_UNDEFINED: {
         std::vector<uint8_t> vec;
-        node->put_string<uint8_t>(key, vec);
+        node->put_string<uint8_t>(key, vec)->assign_meta(SB_META_UNDEFINED);
         return true;
         break;
       }
@@ -1976,7 +1994,7 @@ namespace Serialize{
         std::vector<int8_t> parsed; bool success;
         parsed = _parse_ai<int8_t>(raw, &success);
         if (!success) return false;
-        node->put_string<int8_t>(key, parsed);
+        node->put_string<int8_t>(key, parsed)->assign_meta(SB_META_INT_STYLE);
         return true;
         break;
       }
@@ -1984,7 +2002,7 @@ namespace Serialize{
         std::vector<int16_t> parsed; bool success;
         parsed = _parse_ai<int16_t>(raw, &success);
         if (!success) return false;
-        node->put_string<int16_t>(key, parsed);
+        node->put_string<int16_t>(key, parsed)->assign_meta(SB_META_INT_STYLE);
         return true;
         break;
       }
@@ -1992,7 +2010,7 @@ namespace Serialize{
         std::vector<int32_t> parsed; bool success;
         parsed = _parse_ai<int32_t>(raw, &success);
         if (!success) return false;
-        node->put_string<int32_t>(key, parsed);
+        node->put_string<int32_t>(key, parsed)->assign_meta(SB_META_INT_STYLE);
         return true;
         break;
       }
@@ -2000,7 +2018,7 @@ namespace Serialize{
         std::vector<int64_t> parsed; bool success;
         parsed = _parse_ai<int64_t>(raw, &success);
         if (!success) return false;
-        node->put_string<int64_t>(key, parsed);
+        node->put_string<int64_t>(key, parsed)->assign_meta(SB_META_INT_STYLE);
         return true;
         break;
       }
@@ -2008,7 +2026,7 @@ namespace Serialize{
         std::vector<float> parsed; bool success;
         parsed = _parse_af<float>(raw, &success);
         if (!success) return false;
-        node->put_string<float>(key, parsed);
+        node->put_string<float>(key, parsed)->assign_meta(SB_META_FLOAT_STYLE);
         return true;
         break;
       }
@@ -2016,7 +2034,7 @@ namespace Serialize{
         std::vector<double> parsed; bool success;
         parsed = _parse_af<double>(raw, &success);
         if (!success) return false;
-        node->put_string<double>(key, parsed);
+        node->put_string<double>(key, parsed)->assign_meta(SB_META_FLOAT_STYLE);
         return true;
         break;
       }
@@ -2024,7 +2042,7 @@ namespace Serialize{
         std::vector<long double> parsed; bool success;
         parsed = _parse_af<long double>(raw, &success);
         if (!success) return false;
-        node->put_string<long double>(key, parsed);
+        node->put_string<long double>(key, parsed)->assign_meta(SB_META_FLOAT_STYLE);
         return true;
         break;
       }
@@ -2039,7 +2057,7 @@ namespace Serialize{
             return false;
           }
         }
-        node->put_string<uint8_t>(key, parsed);
+        node->put_string<uint8_t>(key, parsed)->assign_meta(SB_META_BOOLEAN);
         return true;
         break;
       }
@@ -2053,10 +2071,8 @@ namespace Serialize{
       return ParserData{.current_state = AwaitStart, .next_state = AwaitKey, .node = new CompoundNode(), .current_construction = "", .current_value_type = 0, .current_key = "", .value_constructions = std::vector<std::string>()};
     }
 
-    void clean_parser_data(ParserData* data) {
-      if (data->node != NULL)
-        delete data->node;
-      data->node = NULL;
+    void clean_parser_data(ParserData *data) {
+      delete data->node;
     }
 
     ParserState get_value_type_state(char c) {
