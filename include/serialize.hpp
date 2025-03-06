@@ -657,7 +657,7 @@ namespace Serialize{
     std::vector<char>::iterator it;
     for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
       Readable::ParserState state = parser.consume(*it);
-      printf("%d \"%c\"\n",state,*it);
+      //      printf("%d \"%c\"\n",state,*it);
       if (state == Readable::Error)
         return false;
       if (state == Readable::Warning)
