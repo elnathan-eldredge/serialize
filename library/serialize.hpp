@@ -1,4 +1,15 @@
 #pragma once
+/*
+Copyright (c) 2025 Elnathan Eldrege
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
+
+#define EE_Serialize
 
 #include <cstdint>
 #include <istream>
@@ -9,10 +20,12 @@
 #include <vector>
 #include <algorithm>
 #include <string>
+#include <stack>
 #include <string.h>
 
 #define EE_Serialize
-//this definition is limited to this file, to ensure cross-compatibility with system bitness.
+
+// the size of memory address must be 8 bytes (For cross-compatibility. Only this file)
 #define un_size_t uint64_t
 
 #define COMPOUND_NODE_BEGIN_FLAG (char)123
@@ -22,6 +35,16 @@
 #define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)45
 #define COMPOUND_NODE_BEGIN_LIST_FLAG (char)91
 #define COMPOUND_NODE_END_LIST_FLAG (char)93
+
+#define COMPOUND_NODE_BEGIN_FLAG_R *"{"
+#define COMPOUND_NODE_BEGIN_STRING_R *"\""
+#define COMPOUND_NODE_END_STRING_R *"\""
+#define COMPOUND_NODE_ESCAPE_STRING_R *"\\"
+#define COMPOUND_NODE_END_R *"}"
+#define COMPOUND_NODE_KEY_VALUE_SEPERATOR *":"
+#define COMPOUND_NODE_BEGIN_ARRAY_R *"["
+#define COMPOUND_NODE_END_ARRAY_R *"]"
+#define COMPOUND_NODE_ITEM_SEPERATOR_R *","
 
 #define SB_META_UNDEFINED 0
 #define SB_META_INT_STYLE 1
@@ -47,8 +70,8 @@
 #define bp(k)   \
   printf("Breakpoint: %s\n",k);
 
-//If not already included in a seprate library
-
+// The programmer has the option to not include the internal
+// implementation of the base64 translater
 #ifndef SERIALIZE_NO_IMPLEMENT_b64
 namespace Serialize{
   namespace base64{
@@ -94,6 +117,8 @@ namespace Serialize{
       const char s3_4_lrshift = 0;
     }
 
+    //this function is used to determine wether a string can be
+    // successfully decoded
     un_size_t diagnose(std::string data){
       un_size_t idx;
       for(char c : data){
@@ -111,10 +136,10 @@ namespace Serialize{
       b64raw.reserve(data.size());
       char* dat = (char*)data.c_str();
       for(un_size_t i = 0; i < data.size(); i++){
-        char ans = detail::numtable[(size_t)dat[i]];
+        unsigned char ans = detail::numtable[(size_t)dat[i]];
         //      printf("I: %d, %c\n", ans, data[i]);
-        if(ans == SRLS_EQ_ESCAPE_CODE) break;
-        if(ans == 255){
+        if(ans == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
+        if(ans == (unsigned char)(255)){
           //        printf("illegal char: %d, idx: %d\n", dat[i],i);
           return std::vector<char>();
         };
@@ -125,8 +150,8 @@ namespace Serialize{
       un_size_t nextemptyidx  = 0;
       std::vector<char> output;
       output.reserve((data.size()/4)*3); //the b64 array is a multiple of 4
-      for(char byte : b64raw){
-        if(byte==SRLS_EQ_ESCAPE_CODE) break;
+      for(unsigned char byte : b64raw){
+        if(byte == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
         switch(cur64idx % 4){
         case 0:
           output.push_back(0);
@@ -199,6 +224,7 @@ namespace Serialize{
 }
 #endif
 
+
 namespace Serialize{
   
   bool is_big_endian(void){
@@ -209,6 +235,7 @@ namespace Serialize{
     return e.c[0];
   }
 
+  //Inverts the endianness of data in an array
   void* invert_endian_h(uint16_t element_size, un_size_t element_count, void* data_reg){
     char* data_invert = (char*)malloc(element_size * element_count);
     char* data = (char*)data_reg;
@@ -220,11 +247,13 @@ namespace Serialize{
     return data_invert;
   }
 
+  //helper function because according to spec, the [] operator inserts an element
   template<typename T>
   bool exists_key(std::unordered_map<std::string,T>* map, std::string key){
     return map->find(key) != map->end();
   }
 
+  //force type T to be little endian
   template<typename T>
   T little_endian(T d){
     if(!is_big_endian()) return d;
@@ -235,6 +264,8 @@ namespace Serialize{
     return d_copp;
   }
 
+  //This class is a fancy wrapper around
+  // a basic array.
   class SizedBlock{
   public:
     void* contents_native;
@@ -263,9 +294,9 @@ namespace Serialize{
     void assign_meta(uint8_t meta);
 
     ~SizedBlock();
-
   };
 
+  // This data structure represents a serization
   class CompoundNode {
   public:
     std::unordered_map<std::string,SizedBlock*> generic_tags;
@@ -273,6 +304,8 @@ namespace Serialize{
     std::unordered_map<std::string,std::vector<CompoundNode*>> child_node_lists;
 
     CompoundNode(){};
+
+    bool empty();
 
     template<typename T> SizedBlock* put(std::string key, T var);
 
@@ -327,7 +360,8 @@ namespace Serialize{
     std::string serialize_readable(bool omit_undefined);
 
   private:
-    bool deserialize_readable(std::vector<char> *data, un_size_t start_index,
+
+    bool deserialize_readable(std::vector<char> &data, un_size_t start_index,
                               un_size_t *end_index);
 
   public:
@@ -338,8 +372,56 @@ namespace Serialize{
 
     void destroy_children();
   };
+
+  namespace Readable {
+
+    class PushdownParser;
+
+    enum ParserState {
+      AwaitStart,                       // 0
+      AwaitKey,                         // 1
+      ConstructKey,                     // 2
+      ConstructKeyEscape,               // 3
+      AwaitKeyValueSeperator,           // 4
+      AwaitValueTypeIdentifier,         // 5
+      AwaitValue,                       // 6
+      ConstructValueStringEscape,       // 7
+      ConstructValueString,             // 8
+      AwaitValueParsable,               // 9
+      ConstructValueParsable,           // 10
+      AwaitValueParsableSeperator,      // 11
+      ConstructNodeArrayAwaitNode,      // 12
+      ConstructNodeArrayAwaitSeperator, // 13
+      AwaitItemSeperator,               // 14
+      Success,                          // 15
+      Error,                            // 16
+      Warning                           // 17
+    };
+
+    struct ParserData {
+      ParserState current_state = AwaitStart;
+      ParserState next_state = Error;
+      CompoundNode *node = NULL;
+      std::string current_construction = "";
+      char current_value_type = 0;
+      std::string current_key = "";
+      std::vector<std::string> value_constructions = std::vector<std::string>();
+    };
+
+    class PushdownParser {
+    public:
+      
+      std::stack<ParserData> state_stack;
+      ParserData state;
+
+      PushdownParser();
+
+      ParserState consume(char c);
+
+      void merge_to(CompoundNode* node);
+
+      ~PushdownParser();
+    };    
+  }
 }
-
-#undef un_size_t
-
-
+#undef un_size_t uint64_t

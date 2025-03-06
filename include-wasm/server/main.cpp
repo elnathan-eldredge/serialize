@@ -8,11 +8,8 @@
 
 //NOTE: This server is for testing the javascript implementation
 // ONLY! There are serious vulneribilities if this code is used
-<<<<<<< HEAD
-// for a server!
-=======
+
 // for an actual server!
->>>>>>> e1a5123deddff6686e06ce8aa285812e8048faff
 
 
 std::unordered_map<std::string,std::string> extention2mime = {
@@ -30,8 +27,6 @@ std::string guessmime(std::string path){
   return "application/octet-stream";
 } 
 
-<<<<<<< HEAD
-=======
 std::string grabfile(std::string path){
   FILE * f = fopen(path.c_str(),"r");
   if(f == NULL)
@@ -49,7 +44,6 @@ std::string grabfile(std::string path){
   return str;
 }
 
->>>>>>> e1a5123deddff6686e06ce8aa285812e8048faff
 std::vector<char> grabfileb(std::string path){
   FILE * f = fopen(path.c_str(),"r");
   if(f == NULL)
@@ -67,7 +61,6 @@ int main(){
 // HTTP
   httplib::Server svr;
 
-<<<<<<< HEAD
   svr.Get("/", [](const httplib::Request & req, httplib::Response &res) {
       std::vector<char> data = grabfileb("../example.html");
       res.set_content(data.data(), data.size(), "text/html");
@@ -76,19 +69,6 @@ int main(){
   svr.Get("/:file", [](const httplib::Request & req, httplib::Response &res) {
       std::vector<char> data = grabfileb("../" + req.path);
       res.set_content(data.data(), data.size(), guessmime(req.path));
-=======
-  svr.Get("/", [](const httplib::Request &, httplib::Response &res) {
-    res.set_content(grabfile("../example.html"), "text/html");
-  });
-  
-  svr.Get("/:file", [](const httplib::Request & req, httplib::Response &res) {
-    std::vector<char> data = grabfileb("../" + req.path);
-    if(guessmime(req.path) == "application/wasm")
-      data.resize(data.size());
-    res.set_content(data.data(), data.size(), guessmime(req.path));
-
-      
->>>>>>> e1a5123deddff6686e06ce8aa285812e8048faff
   });
 
   svr.listen("0.0.0.0", 8080);

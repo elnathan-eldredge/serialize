@@ -86,7 +86,7 @@ int main(){
 
   printf("original node's tag's value: %s\n", child_node.get_ref<char>("letters"));
   printf("node's child's tag's value: %s\n", node.get_node("child")->get_ref<char>("letters"));
-
+  
   node.put_back("child array", child_node);
   node.put_back("child array", child_node);
   node.put_back("child array", child_node);
@@ -142,17 +142,19 @@ int main(){
     printf("cannot deserialize RSSF\n");
   }
 
+  node.destroy_children();
+
   std::string invalid_code = "{\r\n"
    "\"incomplete\" : n";
 
   printf("About to decode invalid code\n\n");
-  /*
+  
   node.destroy_children();
   if (node.deserialize_readable(invalid_code)) {
     printf("from invalid data (this shoud not happen): \n\n%s\n\n", node.serialize_readable(false).c_str());
   } else {
     printf("Cannot decode invalid RSSN\n");
-    }*/
+  }
   
   return 0;
 }
