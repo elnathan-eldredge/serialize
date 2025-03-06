@@ -50,7 +50,7 @@ May 27, 2024
 
 #define EE_Serialize
 
-//this definition is limited to this file, to ensure cross-compatibility with system bitness.
+// the size of memory address must be 8 bytes (For cross-compatibility. Only this file)
 #define un_size_t uint64_t
 
 #define COMPOUND_NODE_BEGIN_FLAG (char)123
@@ -318,7 +318,6 @@ namespace Serialize{
     void assign_meta(uint8_t meta);
 
     ~SizedBlock();
-
   };
 
   // This data structure represents a serization
@@ -386,7 +385,7 @@ namespace Serialize{
 
   private:
 
-    bool deserialize_readable(std::vector<char> *data, un_size_t start_index,
+    bool deserialize_readable(std::vector<char> &data, un_size_t start_index,
                               un_size_t *end_index);
 
   public:
@@ -397,6 +396,57 @@ namespace Serialize{
 
     void destroy_children();
   };
+
+  namespace Readable {
+
+    class PushdownParser;
+
+    enum ParserState {
+      AwaitStart,                       // 0
+      AwaitKey,                         // 1
+      ConstructKey,                     // 2
+      ConstructKeyEscape,               // 3
+      AwaitKeyValueSeperator,           // 4
+      AwaitValueTypeIdentifier,         // 5
+      AwaitValue,                       // 6
+      ConstructValueStringEscape,       // 7
+      ConstructValueString,             // 8
+      AwaitValueParsable,               // 9
+      ConstructValueParsable,           // 10
+      AwaitValueParsableSeperator,      // 11
+      ConstructNodeArrayAwaitNode,      // 12
+      ConstructNodeArrayAwaitSeperator, // 13
+      AwaitItemSeperator,               // 14
+      Success,                          // 15
+      Error,                            // 16
+      Warning                           // 17
+    };
+
+    struct ParserData {
+      ParserState current_state = AwaitStart;
+      ParserState next_state = Error;
+      CompoundNode *node = NULL;
+      std::string current_construction = "";
+      char current_value_type = 0;
+      std::string current_key = "";
+      std::vector<std::string> value_constructions = std::vector<std::string>();
+    };
+
+    class PushdownParser {
+    public:
+      
+      std::stack<ParserData> state_stack;
+      ParserData state;
+
+      PushdownParser();
+
+      ParserState consume(char c);
+
+      void merge_to(CompoundNode* node);
+
+      ~PushdownParser();
+    };    
+  }
 
   bool CompoundNode::empty() {
     return child_nodes.empty() && generic_tags.empty() && child_node_lists.empty();
@@ -413,12 +463,6 @@ namespace Serialize{
     *index -= 1;
     while((*data)[++*index] != flag && (*data)[*index] != flag2 && (*index) < data->size()){
     }
-    *index += offset;
-  }
-
-  void _rewind_to_flag(char flag, std::vector<char>* data, un_size_t* index, un_size_t offset){
-    *index += 1;
-    while((*data)[--*index] != flag && (*index) >= 0){}
     *index += offset;
   }
 
@@ -440,106 +484,6 @@ namespace Serialize{
   }
 
   bool _is_ascii_whitespace(char c) { return c == 32 || c == 9 || c == 10 || c == 13; }
-
-  void _skip_whitespace(std::vector<char>* data, un_size_t* index,
-                        un_size_t offset) {
-    *index -= 1;
-    while (_is_ascii_whitespace((*data)[++*index])) {}
-    *index += offset;
-  }
-
-  //All parsing functions require a "\0" to signal end-of-data
-  bool _parse_next_enquoted_string(std::vector<char>* data, un_size_t* idx,
-                              std::string* str) {
-    str->clear();
-    _skip_whitespace(data, idx, 0);
-    if ((*data)[*idx] != *"\"")
-      return false;
-    while ((((*data)[++*idx] >= 32 && (*data)[*idx] <= 126) ||
-            (*data)[*idx] == 9 || (*data)[*idx] == 32) &&
-           (*data)[*idx] != *"\"") {
-      if ((*data)[*idx] == *"\\" && (*data)[*idx + 1] == *"\"") {
-        (*str) += *"\"";
-        ++*idx;
-        continue;
-      }
-      (*str) += (*data)[*idx];
-      //      printf("%c\n",(*data)[*idx]);
-    }
-    if ((*data)[*idx] != *"\"")
-      return false;
-    return true;
-  }
-
-  template <typename T>
-  bool _parse_immediate_integer(std::vector<char> *data, un_size_t *idx, T* integer) {
-    *integer = 0;
-    bool neg = false;
-    if ((*data)[*idx] == *"-") {
-      neg = true;
-      ++*idx;
-    } else if ((*data)[*idx] < 48 || (*data)[*idx] > 57) {
-      return false;
-    }
-    --*idx;
-    while ((*data)[++*idx] >= 48 && (*data)[*idx] <= 57) {
-      *integer *= 10;
-      *integer += (*data)[*idx] - 48;
-    }
-    if (neg)
-      *integer *= -1; 
-    return true;
-  }
-
-  template <typename T>
-  bool _parse_immediate_float(std::vector<char> *data, un_size_t *idx,
-                              T *floater) {
-    *floater = 0;
-    bool neg = false;
-    if ((*data)[*idx] == *"-") {
-      neg = true;
-      ++*idx;
-    } else if ((*data)[*idx] < 48 || (*data)[*idx] > 57) {
-      return false;
-    }
-    --*idx;
-    while ((*data)[++*idx] >= 48 && (*data)[*idx] <= 57) {
-      *floater *= 10;
-      *floater += (*data)[*idx] - 48;
-    }
-    if ((*data)[*idx] != *".") {
-      return false;
-    }
-    T radix = 1;
-    while ((*data)[++*idx] >= 48 && (*data)[*idx] <= 57) {
-      radix /= 10.0f;
-      *floater += ((*data)[*idx] - 48) * radix;
-    }
-    if (neg)
-      *floater *= -1;
-    return true;
-  }
-
-  bool _parse_immediate_boolean(std::vector<char> *data, un_size_t *idx,
-                                bool *boolin) {
-    const char* T = "true";
-    const char* F = "false";
-    un_size_t lidx = 0;
-    bool es = ((*data)[*idx] == *"t");
-    --*idx;
-    while (es ? T[lidx] : F[lidx]) {
-      if (((*data)[++*idx]) != (es ? T[lidx] : F[lidx])) {
-        return false;
-      }
-      ++lidx;
-      if (lidx >= strlen(es ? T : F)) {
-        break;
-      }
-    }
-    ++*idx;
-    *boolin = es;
-    return true;
-  }
 
   un_size_t _get_flag(SizedBlock* block) {
     switch (block->meta) {
@@ -605,7 +549,7 @@ namespace Serialize{
     return new_string;
   }
 
-  std::string _value_string(SizedBlock *bloc) { //Needs some drying
+  std::string _value_string(SizedBlock *bloc) {
     std::string d = "";
     unsigned char meta = bloc->meta;
     char flag = _get_flag(bloc);
@@ -619,11 +563,6 @@ namespace Serialize{
       d += "[ ";
       switch (meta) {
       case SB_META_INT_STYLE:{
-        /* for (un_size_t i = 0; i < bloc->span; i += bloc->element_span) {
-          d += _ptis((char*)(bloc->contents_native) + (size_t)i,
-          bloc->element_span); if (i + bloc->element_span < bloc->span) d +=
-          ",";
-            }*/
         switch (bloc->element_span) {
         case sizeof(int8_t):
           for (un_size_t i = 0; i < bloc->span; i += bloc->element_span) {
@@ -706,324 +645,32 @@ namespace Serialize{
     vec.resize(data.size() + 1);
     memcpy(vec.data(), data.data(), data.size() + 1);
     un_size_t t;
-    return deserialize_readable(&vec, 0, &t);
+    return deserialize_readable(vec, 0, &t);
   }
 
-  // before releasing, wrap parsing expressions in template
-  
-  SizedBlock *_parse_value_h(std::vector<char> *vdata, un_size_t *idx) { 
-    SizedBlock* block = new SizedBlock;
-    char* data = vdata->data();
-    switch (data[*idx]) {
-    case SB_FLAG_UNDEFINED:
-      --*idx;
-      while ((*vdata)[++*idx] != *"]") {};
-      return block;
-      break;
-    case SB_FLAG_I8:{
-      *idx += 2;
-      std::vector<char> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        char r = 0;
-        if (!_parse_immediate_integer<char>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        //        printf("parsed i8/u8 %d [%ld]\n",r,all.size()-1);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(uint8_t) * all.size();
-      block->element_span = sizeof(uint8_t);
-      block->contents_native = malloc(sizeof(uint8_t)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(uint8_t) * all.size());
-      block->meta = SB_META_INT_STYLE;
-      break;
-    }
-    case SB_FLAG_I16:{
-      *idx += 2;
-      std::vector<int16_t> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        uint16_t r = 0;
-        if (!_parse_immediate_integer<uint16_t>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        //        printf("parsed i16/u16 %d [%ld]\n",r,all.size()-1);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(uint16_t) * all.size();
-      block->element_span = sizeof(uint16_t);
-      block->contents_native = malloc(sizeof(uint16_t)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(uint16_t) * all.size());
-      block->meta = SB_META_INT_STYLE;
-      break;
-    }
-    case SB_FLAG_I32: {
-      *idx += 2;
-      std::vector<int32_t> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        uint32_t r = 0;
-        if (!_parse_immediate_integer<uint32_t>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        //        printf("parsed i32/u32 %d [%ld]\n",r,all.size()-1);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(uint32_t) * all.size();
-      block->element_span = sizeof(uint32_t);
-      block->contents_native = malloc(sizeof(uint32_t)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(uint32_t) * all.size());
-      block->meta = SB_META_INT_STYLE;
-      break;
-    }
-    case SB_FLAG_I64: {
-      *idx += 2;
-      std::vector<int64_t> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        uint64_t r = 0;
-        if (!_parse_immediate_integer<uint64_t>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        //        printf("parsed i64/u64 %ld [%ld]\n",r,all.size()-1);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(uint64_t) * all.size();
-      block->element_span = sizeof(uint64_t);
-      block->contents_native = malloc(sizeof(uint64_t)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(uint64_t) * all.size());
-      block->meta = SB_META_INT_STYLE;
-      break;
-    }
-    case SB_FLAG_FLOAT:{
-      *idx += 2;
-      std::vector<float> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        float r = 0;
-        if (!_parse_immediate_float<float>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(float) * all.size();
-      block->element_span = sizeof(float);
-      block->contents_native = malloc(sizeof(float)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(float) * all.size());
-      block->meta = SB_META_FLOAT_STYLE;
-      break;
-    }
-    case SB_FLAG_DOUBLE:{
-      *idx += 2;
-      std::vector<double> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        double r = 0;
-        if (!_parse_immediate_float<double>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(double) * all.size();
-      block->element_span = sizeof(double);
-      block->contents_native = malloc(sizeof(double)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(double) * all.size());
-      block->meta = SB_META_FLOAT_STYLE;
-      break;
-    }
-    case SB_FLAG_LONG_DOUBLE:{
-      *idx += 2;
-      std::vector<long double> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        long double r = 0;
-        if (!_parse_immediate_float<long double>(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back(r);
-        _skip_whitespace(vdata, idx, 0);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(long double) * all.size();
-      block->element_span = sizeof(long double);
-      block->contents_native = malloc(sizeof(long double)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(long double) * all.size());
-      block->meta = SB_META_FLOAT_STYLE;
-      break;
-    }
-    case SB_FLAG_BOOLEAN:{
-      *idx += 2;
-      std::vector<uint8_t> all;
-      while (true) {
-        _skip_whitespace(vdata, idx, 0);
-        bool r = 0;
-        if (!_parse_immediate_boolean(vdata, idx, &r)) {
-          delete block;
-          return nullptr;
-        }
-        all.push_back((uint8_t)r);
-        _skip_whitespace(vdata, idx, 0);
-        if (data[*idx] == *","){
-          ++*idx;
-          continue;
-        }
-        if (data[*idx] == *"]")
-          break;
-      }
-      block->span = sizeof(uint8_t) * all.size();
-      block->element_span = sizeof(uint8_t);
-      block->contents_native = malloc(sizeof(uint8_t)*all.size());
-      memcpy(block->contents_native, all.data(), sizeof(uint8_t) * all.size());
-      block->meta = SB_META_BOOLEAN;
-      break;
-    }
-    case SB_FLAG_STRING: {
-      ++*idx;
-      std::string nstr;
-      if (!_parse_next_enquoted_string(vdata, idx, &nstr)) {
-        delete block;
-        return nullptr;
-      }
-      block->span = nstr.size() + 1;
-      block->element_span = sizeof(char);
-      block->contents_native = malloc(nstr.size() + 1);
-      memcpy(block->contents_native, nstr.data(), nstr.size());
-      ((char*)block->contents_native)[nstr.size()] = 0;
-      block->assign_meta(SB_META_STRING);
-      break;
-    }
-    default:
-      delete block;
-      return nullptr;
-    }
-    return block;
-  }
-  
-  bool CompoundNode::deserialize_readable(std::vector<char>* vdata, un_size_t sidx, un_size_t* endidx) {
-    un_size_t idx = sidx;
-    char *data = vdata->data();
-    _return_if_EOF(vdata, idx);
-    _skip_whitespace(vdata, &idx, 0);
-    _rassert_token(data, idx, *"{");
-    ++idx;
-    _return_if_EOF(vdata, idx);
-    _skip_whitespace(vdata, &idx, 0);
-    _rassert_token(data, idx, *"\"");
-    
-    while (true) {
-      std::string key;
-      //      bp("prekey");
-      //      printf("%d\n",idx);
-      if (!_parse_next_enquoted_string(vdata, &idx, &key))
+  bool CompoundNode::deserialize_readable(std::vector<char> &vdata, un_size_t sidx, un_size_t *endidx) {
+
+    Readable::PushdownParser parser = Readable::PushdownParser();
+
+    destroy_children();
+
+    std::vector<char>::iterator it;
+    for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
+      Readable::ParserState state = parser.consume(*it);
+      printf("%d \"%c\"\n",state,*it);
+      if (state == Readable::Error)
         return false;
-      //      bp("postkey");
-      ++idx;
-      _skip_whitespace(vdata, &idx, 0);
-      _rassert_token(data, idx, *":");
-      ++idx;
-      _skip_whitespace(vdata, &idx, 0);
-      if (data[idx] == *"{") {
-        CompoundNode newnode = CompoundNode();
-        if(!newnode.deserialize_readable(vdata, idx, &idx)){
-          return false;
-        }
-        this->put(key, &newnode);
-      } else if (data[idx] == *"[") {
-        ++idx;
-        _return_if_EOF(vdata, idx);
-        while (true) {
-          _skip_whitespace(vdata, &idx, 0);
-          _rassert_token(data, idx, *"{");
-          CompoundNode newnode = CompoundNode();
-          if (!(newnode.deserialize_readable(vdata, idx, &idx))) {
-            return false;
-          }
-          this->put_back(key, newnode);
-          ++idx;
-          _skip_whitespace(vdata, &idx, 0);
-          if (data[idx] == *",") {
-            ++idx;
-            continue;
-          }
-          if (data[idx] == *"]")
-            break;
-          return false;
-        }
-        //        printf("ended arrayp on index %d\n",idx);
-      } else {
-        SizedBlock *block = _parse_value_h(vdata, &idx);
-        if(block == nullptr) return false;
-        if (exists_key(&(this->generic_tags), key)){
-            delete block;
-            return false;
-        };
-        this->generic_tags[key] = block;        
-      }
-      ++idx;
-      //      printf("%s\n",data + idx);
-      _skip_whitespace(vdata, &idx, 0);
-      if (data[idx] == *",") {
-        ++idx;
-        continue;
-      };
-      if(data[idx] == *"}") break;
+      if (state == Readable::Warning)
+        parser.state.current_state = parser.state.next_state;
+      if (state == Readable::Success)
+        break;
     }
-    *endidx = idx;
+
+    if(endidx != nullptr)
+      *endidx = it - vdata.begin();
+
+    parser.merge_to(this);
+    
     return true;
   }
 
@@ -1378,7 +1025,6 @@ namespace Serialize{
     }
     child_node_lists.clear();
     for (std::pair<std::string, SizedBlock *> pair : generic_tags) {
-       printf("Generic tag %s of span %ld\n",pair.first.c_str(), pair.second->span);
        delete pair.second;
     }
     generic_tags = std::unordered_map<std::string, SizedBlock*>();
@@ -1504,58 +1150,14 @@ namespace Serialize{
 
   //Pushdown automaton parser
   namespace Readable {
-
-    enum ParserState {
-      AwaitStart,               // 0
-      AwaitKey,                 // 1
-      ConstructKey,             // 2
-      ConstructKeyEscape,       // 3
-      AwaitKeyValueSeperator,   // 4
-      AwaitValueTypeIdentifier, // 5
-      AwaitValue,               // 6
-      ConstructValueStringEscape,       //7
-      ConstructValueString,             //8
-      AwaitValueParsable,               //9
-      ConstructValueParsable,           //10
-      AwaitValueParsableSeperator,      //11
-      ConstructNodeArrayAwaitNode,      //12
-      ConstructNodeArrayAwaitSeperator, //13
-      AwaitItemSeperator,               //14
-      Success,                          //15
-      Error,                            //16
-      Warning                           //17
-    };
-
+    
     ParserState get_value_type_state(char c);
     bool is_appropriate_value_start(char c, char ident);
-
-    struct ParserData {
-      ParserState current_state = AwaitStart;
-      ParserState next_state = Error;
-      CompoundNode *node = NULL;
-      std::string current_construction = "";
-      char current_value_type = 0;
-      std::string current_key = "";
-      std::vector<std::string> value_constructions = std::vector<std::string>();
-    };
 
     ParserData fresh_parser_data_h();
     void clean_parser_data(ParserData *);
     ssize_t elem_size(char);
     bool parse_insert_generic(CompoundNode*,std::string key,std::vector<std::string>,char);
-    
-    class PushdownParser {
-    public:
-      
-      std::stack<ParserData> state_stack;
-      ParserData state;
-
-      PushdownParser();
-
-      ParserState consume(char c);
-
-      ~PushdownParser();
-    };
 
     ParserState PushdownParser::consume(char c) {
 
@@ -1637,7 +1239,6 @@ namespace Serialize{
             state.current_state = Error;
             break;
           }
-          printf("would've insertet empty generic\n");
           if (!parse_insert_generic(state.node, state.current_key,
                                     std::vector<std::string>(),
                                     state.current_value_type)) {
@@ -1665,9 +1266,8 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_END_STRING_R) {
-          printf("insert string %s\n",state.current_construction.c_str());
           state.node->put_string<char>(
-              state.current_key, state.current_construction.size(),
+              state.current_key, state.current_construction.size()+1,
               (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
           
           state.current_key = "";
@@ -1725,10 +1325,8 @@ namespace Serialize{
             state_stack.top().node->put_back(state_stack.top().current_key, *state.node);
           }
           clean_parser_data(&state);
-          printf("pop from stack");
           state = state_stack.top();
           state_stack.pop();
-          printf("popped node %s\n",state.node->serialize_readable(false).c_str());
           break;
         }
         if (!_is_ascii_whitespace(c))
@@ -1758,7 +1356,6 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-          printf("push to stack");
           state.current_state = ConstructNodeArrayAwaitSeperator;
           state_stack.push(state);
           state = fresh_parser_data_h();
@@ -1777,8 +1374,6 @@ namespace Serialize{
         if (state.current_state == AwaitValue)
           state.current_value_type = c;
         if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-          printf("push to stack");
-          printf("pushing node %s\n",state.node->serialize_readable(false).c_str());
           state.current_state = AwaitItemSeperator;
           state_stack.push(state);
           state = fresh_parser_data_h();
@@ -1852,9 +1447,7 @@ namespace Serialize{
           }
           clean_parser_data(&state);
           state = state_stack.top();
-          printf("pop from stack");
           state_stack.pop();
-          printf("popped node %s\n",state.node->serialize_readable(false).c_str());
           break;
         }
         if (!_is_ascii_whitespace(c))
@@ -1882,16 +1475,15 @@ namespace Serialize{
       return state.current_state;
     } // consume(char)
 
+    void PushdownParser::merge_to(CompoundNode *node) {
+      state.node->copy_to(node);
+    }
+
     PushdownParser::PushdownParser() { state = fresh_parser_data_h(); };
 
     PushdownParser::~PushdownParser() {
-      printf("stack size at destruction%d\n", state_stack.size());
-      printf("current node: %s\n",
-             state.node->serialize_readable(false).c_str());
       clean_parser_data(&state);
       while (!state_stack.empty()) {
-        printf("stacked node: %s\n",
-               state_stack.top().node->serialize_readable(false).c_str());
         clean_parser_data(&state_stack.top());
         state_stack.pop();
       }

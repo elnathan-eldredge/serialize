@@ -144,17 +144,29 @@ int main(){
 
   node.destroy_children();
 
+  Serialize::Readable::PushdownParser parser;
+  for (char c : serialized_hp) {
+    Serialize::Readable::ParserState state = parser.consume(c);
+    printf("%d \"%c\"\n",state,c);
+    if (state == Serialize::Readable::ParserState::Error) {
+      printf("Parser error.\n");
+      break;y
+    }
+  }
+
+  printf("Node after pushdown parsing: %s\n",parser.state.node->serialize_readable(false).c_str());
+
   std::string invalid_code = "{\r\n"
    "\"incomplete\" : n";
 
   printf("About to decode invalid code\n\n");
-  
+  /*
   node.destroy_children();
   if (node.deserialize_readable(invalid_code)) {
     printf("from invalid data (this shoud not happen): \n\n%s\n\n", node.serialize_readable(false).c_str());
   } else {
     printf("Cannot decode invalid RSSN\n");
-  }
+    }*/
   
   return 0;
 }
