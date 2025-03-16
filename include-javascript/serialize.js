@@ -34,6 +34,7 @@ let enforce_endian = (array, unit_size_optional) => {
 
 const  COMPOUND_NODE_BEGIN_FLAG = 123
 const  COMPOUND_NODE_END_FLAG = 125
+const  COMPOUND_NODE_KEY_ESCAPE_FLAG = 47
 const  COMPOUND_NODE_BEGIN_STRING_FLAG  = 44
 const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG  = 58
 const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG_S = ':'
@@ -318,49 +319,127 @@ let _add_escapes_to_readable = (str) => {
     return str.replace('"', '\\"')
 }
 
-enum BasicParserState {
-    AwaitBegin     0,
-    AwaitKeyStart  1,
-    ConstructKey   2,
-    AwaitIndicator 3,
+const BasicParserState = Object.freeze({
+    AwaitBegin         : 0,
+    AwaitKeyStart      : 1,
+    ConstructKey       : 2,
+    ConstructKeyEscape : 3,
+    GetIndicator     : 4,
+    AwaitNodeArrayNode : 5,
     
-    Success        253,
-    Error          254,
-    Warning        255
-}
+    Success            : 253,
+    Error              : 254,
+    Warning            : 255
+})
 
 class BasicPushdownParserData{
-    node = undefined;
+    node = new CompoundNode();
     currentState = BasicParserState.AwaitBegin;
     curstring = "";
+    curKey = "";
     constructor(){};
 }
 
 class BasicPushdownParser{
     stateStack = [];
     state = new BasicPushdownParserData();
-    constructor(){};
     awaitCounter = 0;
+    constructor(){};
     consume(c){
         switch(state.currentState){
 
-        
-            
-        case AwaitBegin:{
+	case BasicParserState.GetIndicator: {
+	    if(c == COMPOUND_NODE_BEGIN_BLOCK_FLAG){
+		break;
+	    }
+	    if(c == COMPOUND_NODE_BEGIN_FLAG){
+		this.state.currentState = AwaitKeyStart;
+		this.stateStack.push(this.state);
+		this.state = new CompoundNode();
+		break;
+	    }
+	    if(c == COMPOUND_NODE_BEGIN_LIST_FLAG){
+		this.state.currentState = AwaitNodeArrayNode;
+		break;
+	    }
+	    this.state.currentState = BasicParserState.Error;
+	    break;
+	}
+
+	case BasicParserState.ConstructKeyEscape:{
+	    if(c == COMPOUND_NODE_END_STRING_FLAG){
+		curstring += c;
+		this.state.currentState = BasicParserState.ConstructKey;
+		break;
+	    }
+	    c += String.fromCharCode(COMPOUND_NODE_END_STRING_FLAG);
+	    curstring += c;
+	    this.state.currentState = BasicParserState.ConstructKey;
+	    break;
+	}
+
+	case BasicParserState.ConstructKey:{
+	    if(c == COMPOUND_NODE_KEY_ESCAPE_FLAG){
+		this.state.currentState = BasicParserState.ConstructKeyEscape;
+		break;
+	    }
+	    if(c == COMPOUND_NODE_END_STRING_FLAG){
+		this.state.curKey = this.state.curstring;
+		this.state.curstring = "";
+		this.state.currentState = BasicParserState.GetIndicator;
+		break;
+	    }
+	    curstring += c;
+	    break;
+	}
+	    
+	case BasicParserState.AwaitKeyStart:{
+	    if(c == COMPOUND_NODE_BEGIN_STRING_FLAG){
+		this.state.currentState = BasicParserState.ConstructKey;
+		this.state.curstring = "";
+		break;
+	    }
+	    if(c == COMPOUND_NODE_END_FLAG){
+		if(this.stateStack.length == 0){
+		    this.state.currentState = BasicParserState.Success;
+		    break;
+		}
+		if(this.stateStack.length >= 0){
+		    let topState = this.stateStack[this.stateStack.length-1].currentState;
+		    let topKey = this.stateStack[this.stateStack.length-1].curKey;
+		    if(topState == BasicParserState.AwaitKeyStart){
+			this.stateStack[this.stateStack.length-1].node.put_node(topKey, this.state.node);
+		    } else if (topState = BasicParserState.AwaitNodeArrayNode){
+			this.stateStack[this.stateStack.length-1].node.put_back(topKey, this.state.node);
+		    } else {
+			this.state = BasicParserState.Error;
+			break;
+		    }
+		    this.state = this.stateStack.pop();
+		    break;
+		}
+		this.state.currentState = BasicParserState.Error;
+	    }
+	    break;
+	}
+	    
+        case BasicParserState.AwaitBegin:{
             if(c == COMPOUND_NODE_BEGIN_FLAG){
                 awaitCounter = 0;
-                state.currentState = AwaitKeyStart;
+                this.state.currentState = BasicParserState.AwaitKeyStart;
             }
             awaitCounter++;
             break;
         }
             
         default:{
-            state.currentState = BasicParserState.Error;
+            this.state.currentState = BasicParserState.Error;
             break;
         }
             
         }
+
+	return this.state.currentState;
         
     }
 }
@@ -460,6 +539,9 @@ class CompoundNode{
         return this.child_node_lists[key]!=undefined;
     }
 
+    empty(){
+	return Object.keys(this.generic_tags).length == 0 && Object.keys(this.child_nodes).length == 0 && Object.keys(this.child_node_lists).length == 0;
+    }
     get(key, optionalcast){
         if(!this.has_compat_array(key,optionalcast!=undefined?optionalcast.BYTES_PER_ELEMENT:1))
             return undefined;

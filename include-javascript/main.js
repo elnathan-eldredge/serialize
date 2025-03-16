@@ -72,3 +72,27 @@ console.log(node);
 console.log("serialization: ", node.serialize())
 console.log("binary serialization", node.serialize_encode())
 
+let parser = new BasicPushdownParser();
+
+let arr = node.serialize();
+let l = arr.length;
+
+let state = BasicParserState.AwaitBegin;
+
+while(l--){
+    state = parser.consume(arr[l]);
+    console.log(state, String.fromCharCode(arr[l]))
+    if(state == undefined){
+	console.log("state is undefine")
+	break;
+    }
+    if(state == BasicParserState.Error){
+	console.log("parser failure")
+	break;
+    }
+    if(state == BasicParserState.Success){
+	console.log("parser success")
+	break;
+    }
+}
+console.log("parsing stopped")
