@@ -36,6 +36,7 @@ const  COMPOUND_NODE_BEGIN_FLAG = 123
 const  COMPOUND_NODE_END_FLAG = 125
 const  COMPOUND_NODE_BEGIN_STRING_FLAG  = 44
 const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG  = 58
+const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG_S = ':'
 const  COMPOUND_NODE_BEGIN_BLOCK_FLAG  = 45
 const  COMPOUND_NODE_BEGIN_LIST_FLAG  = 91
 const  COMPOUND_NODE_END_LIST_FLAG  = 93
@@ -286,10 +287,91 @@ class SizedBlock{
     void destroy_children();
   };
 */
+function ArrayBufferToString(buffer) {
+    return BinaryToString(String.fromCharCode.apply(null, Array.prototype.slice.apply(new Uint8Array(buffer))));
+}
+
+function StringToArrayBuffer(string) {
+    return StringToUint8Array(string).buffer;
+}
+
+function BinaryToString(binary) {
+    var error;
+
+    try {
+        return decodeURIComponent(escape(binary));
+    } catch (_error) {
+        error = _error;
+        if (error instanceof URIError) {
+            return binary;
+        } else {
+            throw error;
+        }
+    }
+}
 
 let _add_escapes_to_string = (str) => {
+    return str.replace(':', '\\:')
+}
+
+let _add_escapes_to_readable = (str) => {
     return str.replace('"', '\\"')
 }
+
+enum BasicParserState {
+    AwaitBegin     0,
+    AwaitKeyStart  1,
+    ConstructKey   2,
+    AwaitIndicator 3,
+    
+    Success        253,
+    Error          254,
+    Warning        255
+}
+
+class BasicPushdownParserData{
+    node = undefined;
+    currentState = BasicParserState.AwaitBegin;
+    curstring = "";
+    constructor(){};
+}
+
+class BasicPushdownParser{
+    stateStack = [];
+    state = new BasicPushdownParserData();
+    constructor(){};
+    awaitCounter = 0;
+    consume(c){
+        switch(state.currentState){
+
+        
+            
+        case AwaitBegin:{
+            if(c == COMPOUND_NODE_BEGIN_FLAG){
+                awaitCounter = 0;
+                state.currentState = AwaitKeyStart;
+            }
+            awaitCounter++;
+            break;
+        }
+            
+        default:{
+            state.currentState = BasicParserState.Error;
+            break;
+        }
+            
+        }
+        
+    }
+}
+
+class ReadablePushdownParserData{
+    node;
+    state;
+    curstring;
+}
+
+class ReadablePushdownParser{}
 
 class CompoundNode{
     generic_tags = {};
@@ -465,7 +547,11 @@ class CompoundNode{
         arr.shrink_to_fit()
         return arr.array()
     }
-    serialize_encode(){}
+    serialize_encode(){
+        let arrb = this.serialize();
+        let str = btoa(ArrayBufferToString(arrb));
+        return str
+    }
     serialize_readable(){}
 
     deserialize(content){}

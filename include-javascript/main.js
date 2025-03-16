@@ -70,5 +70,5 @@ console.log(node.get("keyforfloat64array",Float64Array),
             node.get("keyforuint16array",Uint32Array));
 console.log(node);
 console.log("serialization: ", node.serialize())
-1
+console.log("binary serialization", node.serialize_encode())
 

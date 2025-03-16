@@ -667,7 +667,8 @@ namespace Serialize{
     }
 
     if(endidx != nullptr)
-      *endidx = it - vdata.begin();
+      *endidx =
+        it - vdata.begin();
 
     parser.merge_to(this);
     
