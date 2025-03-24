@@ -564,6 +564,7 @@ namespace Serialize{
       switch (meta) {
       case SB_META_INT_STYLE:{
         switch (bloc->element_span) {
+        default:
         case sizeof(int8_t):
           for (un_size_t i = 0; i < bloc->span; i += bloc->element_span) {
             d += _ptts<int8_t>((int8_t *)((char *)bloc->contents_native + size_t(i)));
@@ -652,8 +653,6 @@ namespace Serialize{
 
     Readable::PushdownParser parser = Readable::PushdownParser();
 
-    destroy_children();
-
     std::vector<char>::iterator it;
     for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
       Readable::ParserState state = parser.consume(*it);
@@ -669,6 +668,8 @@ namespace Serialize{
     if(endidx != nullptr)
       *endidx =
         it - vdata.begin();
+
+    destroy_children();
 
     parser.merge_to(this);
     

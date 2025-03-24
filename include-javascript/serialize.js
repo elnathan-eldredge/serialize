@@ -34,7 +34,7 @@ let enforce_endian = (array, unit_size_optional) => {
 
 const  COMPOUND_NODE_BEGIN_FLAG = 123
 const  COMPOUND_NODE_END_FLAG = 125
-const  COMPOUND_NODE_KEY_ESCAPE_FLAG = 47
+const  COMPOUND_NODE_KEY_ESCAPE_FLAG = 92
 const  COMPOUND_NODE_BEGIN_STRING_FLAG  = 44
 const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG  = 58
 const  COMPOUND_NODE_BEGIN_ELEMENT_FLAG_S = ':'
@@ -49,16 +49,25 @@ const  SB_META_BOOLEAN = 11
 const  SB_META_STRING = 12
 const  SB_META_MAX = 127
 
-const  SB_FLAG_UNDEFINED = "x".charCodeAt(0)
-const  SB_FLAG_I8 = "b".charCodeAt(0)
-const  SB_FLAG_I16 = "m".charCodeAt(0)
-const  SB_FLAG_I32 = "i".charCodeAt(0)
-const  SB_FLAG_I64 = "l".charCodeAt(0)
-const  SB_FLAG_FLOAT = "f".charCodeAt(0)
-const  SB_FLAG_DOUBLE = "d".charCodeAt(0)
-const  SB_FLAG_LONG_DOUBLE = "q".charCodeAt(0)
-const  SB_FLAG_BOOLEAN = "n".charCodeAt(0)
-const  SB_FLAG_STRING = "s".charCodeAt(0)
+const  COMPOUND_NODE_BEGIN_FLAG_R = "{"
+const  COMPOUND_NODE_BEGIN_STRING_FLAG_R = "\""
+const  COMPOUND_NODE_END_STRING_FLAG_R = "\""
+const  COMPOUND_NODE_KV_SEPERATOR_R = ":"
+const  COMPOUND_NODE_BEGIN_LIST_R = "["
+const  COMPOUND_NODE_END_LIST_R = "]"
+const  COMPOUND_NODE_VALUE_SEPERATOR_R = ","
+const  COMPOUND_NODE_END_FLAG_R = "}"
+
+const  SB_FLAG_UNDEFINED = "x"
+const  SB_FLAG_I8 = "b"
+const  SB_FLAG_I16 = "m"
+const  SB_FLAG_I32 = "i"
+const  SB_FLAG_I64 = "l"
+const  SB_FLAG_FLOAT = "f"
+const  SB_FLAG_DOUBLE = "d"
+const  SB_FLAG_LONG_DOUBLE = "q"
+const  SB_FLAG_BOOLEAN = "n"
+const  SB_FLAG_STRING = "s"
 
 /*vector*/
 
@@ -152,6 +161,12 @@ class SizedBlock{
         this.span = this.contents_native.byteLength
     }
 
+    static headerSizeBytes(){
+        return Uint8Array.BYTES_PER_ELEMENT +
+               Uint16Array.BYTES_PER_ELEMENT +
+               BigUint64Array.BYTES_PER_ELEMENT;
+    }
+
     lower(){
         if(this.isdumped())
             return new Uint8Array();
@@ -177,6 +192,30 @@ class SizedBlock{
         result.set(new Uint8Array(span_a.buffer), meta_a.byteLength + elemspan_a.byteLength);
         result.set(contents_little, meta_a.byteLength + elemspan_a.byteLength + span_a.byteLength);
         return result;
+    }
+
+    static interpretSizeFromHeader(uint8array,type){
+        let meta_a = new Uint8Array(uint8array.slice(0,1).buffer);
+        let elemspan_a = new Uint16Array(uint8array.slice(1,3).buffer);
+        let span_a = new BigUint64Array(uint8array.slice(3,11).buffer);
+        invert_endian(meta_a,1);
+        invert_endian(span_a,8);
+        invert_endian(elemspan_a,2);
+        enforce_endian(meta_a, 1);
+        enforce_endian(elemspan_a, 2);
+        enforce_endian(span_a, 8);
+        switch (type){
+        default:
+        case 0:
+            return Number(span_a[0]);
+            break;
+        case 1:
+            return elemspan_a[0]
+            break;
+        case 2:
+            return meta_a[0]
+            break;
+        }
     }
 
     upper(uint8array, startindex){
@@ -215,7 +254,7 @@ class SizedBlock{
         this.meta = 0;        
     };
 
-    copy_to(target){
+    copyTo(target){
         target.span = this.span;
         target.element_span = this.element_span;
         target.meta = this.meta;
@@ -296,6 +335,10 @@ function StringToArrayBuffer(string) {
     return StringToUint8Array(string).buffer;
 }
 
+function StringToUint8Array(str){
+    return new TextEncoder().encode(str);
+}
+
 function BinaryToString(binary) {
     var error;
 
@@ -311,6 +354,159 @@ function BinaryToString(binary) {
     }
 }
 
+let _get_flag = (bloc) => {
+    switch(bloc.meta) {
+    case SB_META_BOOLEAN:
+        return SB_FLAG_BOOLEAN;
+        break;
+    case SB_META_STRING:
+        return SB_FLAG_STRING;
+        break;
+    case SB_META_INT_STYLE:{
+        switch(bloc.element_span){
+        case 1:
+            return SB_FLAG_I8
+            break;
+        case 2:
+            return SB_FLAG_I16
+            break;
+        case 4:
+            return SB_FLAG_I32
+            break;
+        case 8:
+            return SB_FLAG_I64
+            break;
+        default:
+            return SB_FLAG_UNDEFINED
+            break;
+        }
+        break;
+    }
+    case SB_META_FLOAT_STYLE: {
+        switch (bloc.element_span) {
+        case 4:
+            return SB_FLAG_FLOAT;
+            break;
+        case 8:
+            return SB_FLAG_DOUBLE;
+            break;
+        case 16:
+            return SB_FLAG_LONG_DOUBLE;
+            break;
+        default:
+            return SB_FLAG_UNDEFINED;
+            break;
+        }
+        break;
+    }
+    default:
+        return SB_FLAG_UNDEFINED;
+        break;
+    }
+    return SB_FLAG_UNDEFINED
+}
+
+let getfloatarray = (bloc) => {
+    switch(bloc.element_span){
+    case 4:
+        console.log("ff:", bloc.span,bloc.element_span,bloc.meta)
+        return new Float32Array(bloc.contents_native.buffer.slice())
+        break;
+    case 8:
+        return new Float64Array(bloc.contents_native.buffer.slice())
+        break;
+    case 16:
+        return new Float64Array(bloc.contents_native.buffer.slice())
+        break;
+    default:
+        console.log("bad block: ", bloc)
+    }
+}
+
+let getintarray = (bloc) => {
+    switch(bloc.element_span){
+    default:
+    case 1:
+        return new Int8Array(bloc.contents_native.buffer.slice())
+        break;
+    case 2:
+        return new Int16Array(bloc.contents_native.buffer.slice())
+        break;
+    case 4:
+        return new Int32Array(bloc.contents_native.buffer.slice())
+        break;
+    case 8:
+        return new BigInt64Array(bloc.contents_native.buffer.slice())
+        break;
+    }
+}
+
+let _value_string = (bloc) => {
+    let d = _get_flag(bloc);
+//    console.log(bloc.span,bloc.element_span,bloc.meta)
+    switch(d){
+    default:
+    case SB_FLAG_UNDEFINED:
+        d += COMPOUND_NODE_BEGIN_LIST_R
+        d += COMPOUND_NODE_END_LIST_R
+        break;
+    case SB_FLAG_STRING:{
+        d += COMPOUND_NODE_BEGIN_STRING_FLAG_R
+        for(let num of bloc.contents_native){
+            if(num == 0)
+                break
+            d += String.fromCharCode(num)
+        }
+        d += COMPOUND_NODE_END_STRING_FLAG_R
+        break;
+    }
+    case SB_FLAG_BOOLEAN:{
+        d += COMPOUND_NODE_BEGIN_LIST_R
+        for(let num of bloc.contents_native){
+            if(num == 0)
+                d += "false"
+            else
+                d += "true"
+            d += ","
+        }
+        if(d.slice(-1) == ",")
+            d = d.slice(0,-1)
+        d += COMPOUND_NODE_END_LIST_R
+        break;
+    }
+    case SB_FLAG_I8:
+    case SB_FLAG_I16:
+    case SB_FLAG_I32:
+    case SB_FLAG_I64:{
+        d += COMPOUND_NODE_BEGIN_LIST_R
+        let arr = getintarray(bloc);
+        for(let integer of arr){
+            d += Math.round(Number(integer)).toString()
+            d += COMPOUND_NODE_VALUE_SEPERATOR_R
+        }
+        if(d.slice(-1) == ",")
+            d = d.slice(0,-1)
+        d += COMPOUND_NODE_END_LIST_R;
+        break;
+    }
+    case SB_FLAG_FLOAT:
+    case SB_FLAG_DOUBLE:
+    case SB_FLAG_LONG_DOUBLE:{
+        d += COMPOUND_NODE_BEGIN_LIST_R
+        let arr = getfloatarray(bloc);
+        for(let floating of arr){
+            d += Number(floating).toString()
+            d += COMPOUND_NODE_VALUE_SEPERATOR_R
+        }
+        if(d.slice(-1) == ",")
+            d = d.slice(0,-1)
+        d += COMPOUND_NODE_END_LIST_R;
+        break;
+    }
+    }
+    return d
+}
+
 let _add_escapes_to_string = (str) => {
     return str.replace(':', '\\:')
 }
@@ -319,14 +515,24 @@ let _add_escapes_to_readable = (str) => {
     return str.replace('"', '\\"')
 }
 
+let base64ToArrayBuffer = (base64) => {
+    var binaryString = atob(base64);
+    var bytes = new Uint8Array(binaryString.length);
+    for (var i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
 const BasicParserState = Object.freeze({
     AwaitBegin         : 0,
     AwaitKeyStart      : 1,
     ConstructKey       : 2,
     ConstructKeyEscape : 3,
-    GetIndicator     : 4,
+    GetIndicator       : 4,
     AwaitNodeArrayNode : 5,
-    
+    AquireNodeHeader   : 6,
+    AquireNodeData     : 7,
     Success            : 253,
     Error              : 254,
     Warning            : 255
@@ -338,6 +544,9 @@ class BasicPushdownParserData{
     curstring = "";
     curKey = "";
     constructor(){};
+    nodeData = [];
+    nodeDataCounter = 0;
+    nodeDataLeft = 0;
 }
 
 class BasicPushdownParser{
@@ -345,35 +554,107 @@ class BasicPushdownParser{
     state = new BasicPushdownParserData();
     awaitCounter = 0;
     constructor(){};
+    writeToNode(otherNode){
+        this.state.node.copyTo(otherNode);
+    };
     consume(c){
-        switch(state.currentState){
+
+        switch(this.state.currentState){
+
+        case BasicParserState.AwaitNodeArrayNode:{
+            if(c == COMPOUND_NODE_END_LIST_FLAG){
+                this.state.currentState = BasicParserState.AwaitKeyStart
+                break;
+            }
+            if(c == COMPOUND_NODE_BEGIN_FLAG){
+		this.stateStack.push(this.state);
+		this.state = new BasicPushdownParserData();
+                this.state.currentState = BasicParserState.AwaitKeyStart;
+		break;
+            }
+            break;
+        }
+
+        case BasicParserState.AquireNodeData: {
+            //console.log("data left: ", this.state.nodeDataLeft)
+            this.state.nodeData.push(c);
+            this.state.nodeDataLeft--;
+            if(this.state.nodeDataLeft <= 0){
+                let newBlock = new SizedBlock();
+                try {
+                    newBlock.upper(new Uint8Array(this.state.nodeData));
+                } catch (e) {
+                    this.state.currentState = BasicParserState.Error;
+                    break;
+                }
+                this.state.node.generic_tags[this.state.curKey] = newBlock;
+                this.state.currentState = BasicParserState.AwaitKeyStart;
+                //console.log("upper'd node");
+                break;
+            }
+            break;
+        }
+
+        case BasicParserState.AquireNodeHeader: {
+            let counterval = this.state.nodeDataCounter;
+            let headersize = SizedBlock.headerSizeBytes();
+            this.state.nodeData.push(c)
+            this.state.nodeDataCounter ++;
+            if(counterval < headersize - 1)
+                break;
+            if(counterval == headersize - 1){ // if the parser is on the last header byte
+                this.state.nodeDataLeft = SizedBlock.interpretSizeFromHeader(new Uint8Array(this.state.nodeData));
+                //console.log("read header, data left: ", this.state.nodeDataLeft)
+                if(this.state.nodeDataLeft == 0){
+                    let newBlock = new SizedBlock();
+                    try {
+                        newBlock.upper(new Uint8Array(this.state.nodeData));
+                    } catch (e) {
+                        this.state.currentState = BasicParserState.Error;
+                        break;
+                    }
+                    this.state.node.generic_tags[this.state.curKey] = newBlock;
+                    this.state.currentState = BasicParserState.AwaitKeyStart;
+                    //console.log("upper'd node");
+                    break;
+                }
+                this.state.currentState = BasicParserState.AquireNodeData;
+                break;
+            }
+            this.state.currentState = BasicParserState.Error;
+            break;
+        }
 
 	case BasicParserState.GetIndicator: {
 	    if(c == COMPOUND_NODE_BEGIN_BLOCK_FLAG){
+                this.state.currentState = BasicParserState.AquireNodeHeader;
+                this.state.nodeData = [];
+                this.state.nodeDataCounter = 0;
+                this.state.nodeDataLeft = 0;
 		break;
 	    }
 	    if(c == COMPOUND_NODE_BEGIN_FLAG){
-		this.state.currentState = AwaitKeyStart;
+		this.state.currentState = BasicParserState.AwaitKeyStart;
 		this.stateStack.push(this.state);
-		this.state = new CompoundNode();
+		this.state = new BasicPushdownParserData();
+                this.state.currentState = BasicParserState.AwaitKeyStart;
 		break;
 	    }
 	    if(c == COMPOUND_NODE_BEGIN_LIST_FLAG){
-		this.state.currentState = AwaitNodeArrayNode;
+		this.state.currentState = BasicParserState.AwaitNodeArrayNode;
 		break;
 	    }
-	    this.state.currentState = BasicParserState.Error;
 	    break;
 	}
 
 	case BasicParserState.ConstructKeyEscape:{
-	    if(c == COMPOUND_NODE_END_STRING_FLAG){
-		curstring += c;
+	    if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
+	        this.state.curstring += String.fromCharCode(c);
 		this.state.currentState = BasicParserState.ConstructKey;
 		break;
 	    }
-	    c += String.fromCharCode(COMPOUND_NODE_END_STRING_FLAG);
-	    curstring += c;
+	    this.state.curstring += String.fromCharCode(COMPOUND_NODE_BEGIN_ELEMENT_FLAG);
+            this.state.curstring += String.fromCharCode(c);
 	    this.state.currentState = BasicParserState.ConstructKey;
 	    break;
 	}
@@ -383,13 +664,13 @@ class BasicPushdownParser{
 		this.state.currentState = BasicParserState.ConstructKeyEscape;
 		break;
 	    }
-	    if(c == COMPOUND_NODE_END_STRING_FLAG){
+	    if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
 		this.state.curKey = this.state.curstring;
 		this.state.curstring = "";
 		this.state.currentState = BasicParserState.GetIndicator;
 		break;
 	    }
-	    curstring += c;
+            this.state.curstring += String.fromCharCode(c);
 	    break;
 	}
 	    
@@ -409,12 +690,13 @@ class BasicPushdownParser{
 		    let topKey = this.stateStack[this.stateStack.length-1].curKey;
 		    if(topState == BasicParserState.AwaitKeyStart){
 			this.stateStack[this.stateStack.length-1].node.put_node(topKey, this.state.node);
-		    } else if (topState = BasicParserState.AwaitNodeArrayNode){
+		    } else if (topState == BasicParserState.AwaitNodeArrayNode){
 			this.stateStack[this.stateStack.length-1].node.put_back(topKey, this.state.node);
 		    } else {
 			this.state = BasicParserState.Error;
 			break;
 		    }
+                    //console.log("popping from stack")
 		    this.state = this.stateStack.pop();
 		    break;
 		}
@@ -425,10 +707,8 @@ class BasicPushdownParser{
 	    
         case BasicParserState.AwaitBegin:{
             if(c == COMPOUND_NODE_BEGIN_FLAG){
-                awaitCounter = 0;
                 this.state.currentState = BasicParserState.AwaitKeyStart;
             }
-            awaitCounter++;
             break;
         }
             
@@ -444,13 +724,260 @@ class BasicPushdownParser{
     }
 }
 
-class ReadablePushdownParserData{
-    node;
-    state;
-    curstring;
+let _is_ascii_whitespace = (character) => {
+    let c = character.charCodeAt(0);
+    return c == 32 || c == 9 || c == 10 || c == 13;
 }
 
-class ReadablePushdownParser{}
+const ParserState = Object.freeze({
+    AwaitStart                       : 0,
+    AwaitKey                         : 1,
+    ConstructKey                     : 2,
+    ConstructKeyEscape               : 3,
+    AwaitKeyValueSeperator           : 4,
+    AwaitValueTypeIdentifier         : 5,
+    AwaitValue                       : 6,
+    ConstructValueStringEscape       : 7,
+    ConstructValueString             : 8,
+    AwaitValueParsable               : 9,
+    ConstructValueParsable           : 10,
+    AwaitValueParsableSeperator      : 11,
+    ConstructNodeArrayAwaitNode      : 12,
+    ConstructNodeArrayAwaitSeperator : 13,
+    AwaitItemSeperator               : 14,
+    Success                          : 253,
+    Error                            : 254,
+    Warning                          : 255,
+})
+
+class ReadableParserData{
+    currentState = ParserState.AwaitStart
+    nextState = ParserState.Error
+    node = new CompoundNode()
+    currentConstruction = ""
+    currentValueType = 0
+    currentKey = ""
+    value_construction = []
+    constructor(){}
+}
+
+class ReadablePushdownParser{
+    state = new ReadableParserData();
+    stateStack = [];
+    constructor(){}
+    
+    consume(c){
+        switch(state.currentState){
+
+        case 
+            
+        case ParserState.AwaitKey:{
+            if(c == COMPOUND_NODE_BEGIN_STRING_R){
+                state.current_state = ParserState.ConstructKey;
+                break;
+            }
+            if(c == COMPOUND_NODE_END_R && stateStack.length == 0 && state.node.empty()){
+                state.currentState = ParserState.Success;
+                break;
+            }
+            if(c == COMPOUND_NODE_END_R && !stateStack.length==0 && state.node.empty()){
+                if(stateStack[stateStack.length-1].currentState == ParserState.AwaitItemSeperator){
+                    stateStack[stateStack.length-1].node.put_node(stateStack[stateStack.length-1].currentKey,state.node)
+                } else if (stateStack[stateStack.length-1].currentState == ParserState.ConstructNodeArrayAwaitSeperator){
+                    stateStack[stateStack.length-1].node.put_back(stateStack[stateStack.length-1].currentKet,state.node)
+                } else {
+                    state.currentState = Error
+                }
+                state = stateStack.pop()
+                break;
+            }
+            if (!_is_ascii_whitespace(c))
+                state.current_state = ParserState.Error;
+            break;
+        }
+
+        case ParserState.AwaitStart:{
+            if(c == COMPOUND_NODE_BEGIN_FLAG_R){
+                state.current_state = ParserState.AwaitKey;
+                break;
+            }
+            if(!_is_ascii_whitespace(c))
+                state.current_state = ParserState.Error;
+            break;
+        }
+            
+        default:
+            state.currentState = ParserState.Error;
+            break;
+        }
+    }
+}
+
+let elem_size = (flag) => {
+    switch(flag){
+    case SB_FLAG_UNDEFINED:
+        return 1
+        break;
+    case SB_FLAG_I8:
+        return 1
+        break;
+    case SB_FLAG_I16:
+        return 2
+        break;
+    case SB_FLAG_I32:
+        return 4
+        break;
+    case SB_FLAG_I64:
+        return 8
+        break;
+    case SB_FLAG_FLOAT:
+        return 4
+        break;
+    case SB_FLAG_DOUBLE:
+        return 8
+        break;
+    case SB_FLAG_LONG_DOUBLE:
+        return 16
+        break;
+    case SB_FLAG_BOOLEAN:
+        return 1
+        break;
+    case SB_FLAG_STRING:
+        return 1
+        break;
+    }
+    return -1
+}
+
+let _safe_iparse = (str,successcontainer) => {
+    let num;
+    num = parseInt(str)
+    if(num == NaN)
+        succescontainer["success"] = false
+    succescontainer["success"] = true
+    return num
+}
+
+let _safe_fparse = (str,successcontainer) => {
+    let num;
+    num = parseFloat(str)
+    if(num == NaN)
+        succescontainer["success"] = false
+    succescontainer["success"] = true
+    return num    
+}
+
+let parse_insert_generic = (noderef, key, array, parse_type) => {
+    switch(parse_type){
+    case SB_FLAG_UNDEFINED: {
+        noderef.put(key, new Uint8Array(), 1, Uint8Array).assign_meta(SB_META_UNDEFINE);
+        return true;
+        break;
+    }
+    case SB_FLAG_I8: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_iparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Int8Array(arr), 1, Int8Array).assign_meta(SB_META_INT_STLE)
+        return true
+        break;
+    }
+    case SB_FLAG_I16: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_iparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Int16Array(arr), 2, Int16Array).assign_meta(SB_META_INT_STYLE)
+        return true
+        break;        
+    }
+    case SB_FLAG_I32: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_iparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Int32Array(arr), 4, Int32Array).assign_meta(SB_META_INT_STYLE)
+        return true
+        break;        
+    }
+    case SB_FLAG_I64: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_iparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Int32Array(arr), 8, Int64Array).assign_meta(SB_META_INT_STYLE)
+        return true
+        break;        
+    }
+    case SB_FLAG_FLOAT: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_fparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Float32Array(arr), 4, Float32Array).assign_meta(SB_META_FLOAT_STYLE)
+        return true
+        break;        
+    }
+    case SB_FLAG_DOUBLE: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_fparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(SB_META_FLOAT_STYLE)
+        return true
+        break;        
+    }
+    case SB_FLAG_LONG_DOUBLE: {
+        let arr = []
+        for(let str of array){
+            let result = {}
+            arr.push(_safe_fparse(str,result))
+            if(result.success == false)
+                return false
+        }
+        node.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(SB_META_FLOAT_STYLE)
+        return true;
+        break;        
+    }
+    case SB_FLAG_BOOLEAN: {
+        let arr = []
+        for(let str of array){
+            if(str == "true"){
+                arr.push(1)
+            } else if (str == "false"){
+                arr.push(0)
+            } else {
+                return false
+            }
+        }
+        node.put(key,new Uint8Array(arr),Uint8Array).assign_meta(SB_META_BOOLEAN)
+        return true;
+        break;
+    }
+    default:
+        break;
+    }
+    return false
+}
 
 class CompoundNode{
     generic_tags = {};
@@ -497,23 +1024,23 @@ class CompoundNode{
     put_node(key, node_or_array){
         if(typeof(node_or_array) == "object"){
             let ncn = new CompoundNode()
-            node_or_array.copy_to(ncn);
+            node_or_array.copyTo(ncn);
             this.child_nodes[key] = ncn;
             return;
         }
         child_node_lists[key] = []
         for (let node in node_or_array){
             let ncn = new CompoundNode();
-            code.copy_to(ncn);
+            code.copyTo(ncn);
             child_node_lists[key].push(node_or_array);
         }
         return node_or_array
     }
-    put_back(key, node){
+    put_back(key, anode){
         if(this.child_node_lists[key] == undefined)
             this.child_node_lists[key] = [];
         let ncn = new CompoundNode();
-        node.copy_to(ncn);
+        anode.copyTo(ncn);
         this.child_node_lists[key].push(ncn);
         return ncn
     }
@@ -564,25 +1091,24 @@ class CompoundNode{
         return this.child_node_lists[key]
     }
 
-    copy_to(target){
+    copyTo(target){
         target.destroy_children()
         for(let key in this.generic_tags){
             let nsb = new SizedBlock();
-            this.generic_tags[key].copy_to(nsb);
+            this.generic_tags[key].copyTo(nsb);
             target.generic_tags[key] = nsb;
         }
         for(let key in this.child_nodes){
             let ncn = new CompoundNode();
-            this.child_nodes[key].copy_to(ncn);
-            target.child_nodes[key] = ncn;
+            this.child_nodes[key].copyTo(ncn);
+            target.put_node("key",ncn);
         }
         for(let key in this.child_node_lists){
-            target.child_node_lists[key] = [];
             let list = this.child_node_lists[key];
             for(let lnode in list){
                 let ncn = new CompoundNode();
-                lnode.copy_to(ncn);
-                target.child_node_lists[key].push(ncn);
+                list[lnode].copyTo(ncn);
+                target.put_back(key,ncn)
             }
         }
     }
@@ -634,10 +1160,70 @@ class CompoundNode{
         let str = btoa(ArrayBufferToString(arrb));
         return str
     }
-    serialize_readable(){}
+    
+    serialize_readable(){
+        let serialization = COMPOUND_NODE_BEGIN_FLAG_R
+        let loop = 0;
+        for(const key in this.generic_tags){
+            serialization += COMPOUND_NODE_BEGIN_STRING_FLAG_R
+            serialization += _add_escapes_to_readable(key)
+            serialization += COMPOUND_NODE_END_STRING_FLAG_R
+            serialization += COMPOUND_NODE_KV_SEPERATOR_R
+            serialization += _value_string(this.generic_tags[key])
+            if(++loop < Object.keys(this.generic_tags).length || !Object.keys(this.child_nodes).length==0 || !Object.keys(this.child_node_lists).length==0)
+                serialization += COMPOUND_NODE_VALUE_SEPERATOR_R
+        }
+        loop = 0
+        for(const key in this.child_nodes){
+            serialization += COMPOUND_NODE_BEGIN_STRING_FLAG_R
+            serialization += _add_escapes_to_readable(key)
+            serialization += COMPOUND_NODE_END_STRING_FLAG_R
+            serialization += COMPOUND_NODE_KV_SEPERATOR_R
+            serialization += this.child_nodes[key].serialize_readable()
+            if(++loop < Object.keys(this.child_nodes).length || !Object.keys(this.child_node_lists).length==0)
+                serialization += COMPOUND_NODE_VALUE_SEPERATOR_R
+        }
+        loop = 0
+        for(const key in this.child_node_lists){
+            serialization += COMPOUND_NODE_BEGIN_STRING_FLAG_R
+            serialization += _add_escapes_to_readable(key)
+            serialization += COMPOUND_NODE_END_STRING_FLAG_R
+            serialization += COMPOUND_NODE_KV_SEPERATOR_R
+            serialization += COMPOUND_NODE_BEGIN_LIST_R
+            let loop2 = 0
+            for(const node of this.child_node_lists[key]){
+                serialization += node.serialize_readable();
+                if(++loop2 < this.child_node_lists[key].length)
+                    serialization += COMPOUND_NODE_VALUE_SEPERATOR_R
+            }
+            serialization += COMPOUND_NODE_END_LIST_R           
+            if(++loop < Object.keys(this.child_node_lists).length)
+                serialization += COMPOUND_NODE_VALUE_SEPERATOR_R
+        }
+        serialization += COMPOUND_NODE_END_FLAG_R
+        return serialization
+    }
 
-    deserialize(content){}
-    deserialize_decode(content){}
+    deserialize(content){
+        let parser = new BasicPushdownParser();
+        for(let i = 0; i < content.length; i++){
+            state = parser.consume(content[i])
+            if(state == BasicParserState.Error)
+                break;
+            if(state == BasicParserState.Warning)
+                parser.state.currentState = parser.state.nextState
+        }
+        if(state != BasicParserState.Success)
+            return false;
+        this.destroy_children()
+        parser.state.node.copyTo(this)
+        return true;
+    }
+    deserialize_decode(content){
+        let str = content;
+        let arrb = new Uint8Array(base64ToArrayBuffer(content))
+        this.deserialize(arrb)
+    }
     deserialize_readable(content){}
 
     destroy_children(){
