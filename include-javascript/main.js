@@ -117,4 +117,28 @@ let generatedByOtherProgram ="eyxyZXNlcnZlZCBlc2NhcGVzIGNhbiBiZSB1c2VkIGFzIHdlbG
 
 node.deserialize_decode(generatedByOtherProgram)
 
-console.log("readable:", node.serialize_readable())
+console.log("deserialized from other program:", node.serialize_readable())
+
+let generatedByOtherProgramR = '{ "reserved escapes can be used as well \{}" : s":\\"\\4{}:\:", "some booleans" : n[ true,true,true,true,true,true,true,true,false,true,true,true,true,true,true,false], "two number64s" : l[ -71491328285473016,2544317353496064], "four number32s" : i[ 84281096,-16645372,202182144,592395], "number8" : b[ -127], "some string2" : s"this is a string of letters2", "sixteen number8s" : b[ 8,7,6,5,4,3,2,-1,0,14,13,12,11,10,9,0], "some string" : s"this is a string of letters", "eight number16s" : m[ 1800,1286,772,-254,3584,3085,2571,9], "number64" : l[ 81985529216486895], "wrong meta\'d string" : x[ ], "double" : d[ -0.196152], "child" : { "letters" : s"higklmn"}, "child array" : [{ "letters" : s"opqrstu"}, { "letters" : s"abcdefg"}, { "letters" : s"abcdefg"}]}'
+
+let parserR = new ReadablePushdownParser();
+
+for(let c of generatedByOtherProgramR){
+    let stater = parserR.consume(c);
+    console.log(state, c)
+    if(stater == undefined){
+        console.log("state became undefined")
+        break;
+    }
+    if(stater == ParserState.Error){
+        console.log("parser error (readable)")
+        break;
+        
+    }
+    if(stater == ParserState.Error){
+        console.log("parser success (readable)")
+        break;
+        
+    }
+}
+
