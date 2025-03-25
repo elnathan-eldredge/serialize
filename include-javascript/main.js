@@ -123,22 +123,23 @@ let generatedByOtherProgramR = '{ "reserved escapes can be used as well \{}" : s
 
 let parserR = new ReadablePushdownParser();
 
+state = BasicParserState;
+
 for(let c of generatedByOtherProgramR){
-    let stater = parserR.consume(c);
+    let state = parserR.consume(c);
     console.log(state, c)
-    if(stater == undefined){
-        console.log("state became undefined")
-        break;
-    }
-    if(stater == ParserState.Error){
+    if(state == ParserState.Error){
         console.log("parser error (readable)")
         break;
         
     }
-    if(stater == ParserState.Error){
+    if(state == ParserState.Error){
         console.log("parser success (readable)")
+        break;        
+    }
+    if(state == undefined){
+        console.log("state became undefined")
         break;
-        
     }
 }
 
