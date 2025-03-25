@@ -50,6 +50,7 @@ const  SB_META_STRING = 12
 const  SB_META_MAX = 127
 
 const  COMPOUND_NODE_BEGIN_FLAG_R = "{"
+const  COMPOUND_NODE_ESCAPE_STRING_R = "\\"
 const  COMPOUND_NODE_BEGIN_STRING_FLAG_R = "\""
 const  COMPOUND_NODE_END_STRING_FLAG_R = "\""
 const  COMPOUND_NODE_KV_SEPERATOR_R = ":"
@@ -769,12 +770,32 @@ class ReadablePushdownParser{
     consume(c){
         switch(this.state.currentState){
 
+	 
+	    
+	case ParserState.ConstructNodeArrayAwaitNode: {
+            if (c == COMPOUND_NODE_END_LIST_R && this.state.node.get_node_list_length(this.state.currentKey) == 0) {
+		this.state.current_key = "";
+		this.state.current_state = ParserState.AwaitItemSeperator;
+		break;
+            }
+            if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+		this.state.current_state = ParserState.ConstructNodeArrayAwaitSeperator;
+		this.stateStack.push(this.state);
+		this.state = new ReadableParserData();
+		this.state.currentState = ParserState.AwaitKey;
+		break;
+            }
+            if(!_is_ascii_whitespace(c))
+		this.state.currentState = ParserState.Error;
+            break;
+	}
+	    
         case ParserState.AwaitValueTypeIdentifier: {
             this.state.currentState = get_value_type_state(c);
             if (this.state.currentState == ParserState.Error)
                 break;
             if (this.state.currentState == ParserState.AwaitValue)
-                state.currentValueType = c;
+                this.state.currentValueType = c;
             if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
                 this.state.currentState = ParserState.AwaitItemSeperator;
                 this.stateStack.push(this.state);
@@ -782,7 +803,7 @@ class ReadablePushdownParser{
                 this.state.currentState = ParserState.AwaitKey;
                 break;
             }
-            if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+            if (c == COMPOUND_NODE_BEGIN_LIST_R) {
                 this.state.currentState = ParserState.ConstructNodeArrayAwaitNode;
                 break;
             }
@@ -790,7 +811,7 @@ class ReadablePushdownParser{
         }
             
         case ParserState.AwaitKeyValueSeperator: {
-            if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+            if (c == COMPOUND_NODE_KV_SEPERATOR_R) {
                 this.state.currentState = ParserState.AwaitValueTypeIdentifier;
                 break;
             }
@@ -800,7 +821,7 @@ class ReadablePushdownParser{
         }
 
         case ParserState.ConstructKeyEscape: {
-            if (c == COMPOUND_NODE_END_STRING_R) {
+            if (c == COMPOUND_NODE_END_STRING_FLAG_R) {
                 this.state.currentConstruction += c;
                 this.state.currentState = ParserState.ConstructKey;
                 break;
@@ -816,7 +837,7 @@ class ReadablePushdownParser{
         }
 
         case ParserState.ConstructKey: {
-            if(c == COMPOUND_NODE_END_STRING_R) {
+            if(c == COMPOUND_NODE_END_STRING_FLAG_R) {
                 this.state.currentState = ParserState.AwaitKeyValueSeperator;
                 this.state.currentKey = this.state.current_construction;
                 this.state.currentConstruction = "";
@@ -831,15 +852,15 @@ class ReadablePushdownParser{
         }
             
         case ParserState.AwaitKey:{
-            if(c == COMPOUND_NODE_BEGIN_STRING_R){
-                this.state.current_state = ParserState.ConstructKey;
+            if(c == COMPOUND_NODE_BEGIN_STRING_FLAG_R){
+                this.state.currentState = ParserState.ConstructKey;
                 break;
             }
-            if(c == COMPOUND_NODE_END_R && this.stateStack.length == 0 && this.state.node.empty()){
+            if(c == COMPOUND_NODE_END_FLAG_R && this.stateStack.length == 0 && this.state.node.empty()){
                 this.state.currentState = ParserState.Success;
                 break;
             }
-            if(c == COMPOUND_NODE_END_R && !this.stateStack.length==0 && this.state.node.empty()){
+            if(c == COMPOUND_NODE_END_FLAG_R && !this.stateStack.length==0 && this.state.node.empty()){
                 if(this.stateStack[this.stateStack.length-1].currentState == ParserState.AwaitItemSeperator){
                     this.stateStack[this.stateStack.length-1].node.put_node(this.stateStack[this.stateStack.length-1].currentKey,this.state.node)
                 } else if (this.stateStack[this.stateStack.length-1].currentState == ParserState.ConstructNodeArrayAwaitSeperator){
@@ -857,11 +878,11 @@ class ReadablePushdownParser{
 
         case ParserState.AwaitStart:{
             if(c == COMPOUND_NODE_BEGIN_FLAG_R){
-                this.state.current_state = ParserState.AwaitKey;
+                this.state.currentState = ParserState.AwaitKey;
                 break;
             }
             if(!_is_ascii_whitespace(c))
-                this.state.current_state = ParserState.Error;
+                this.state.currentState = ParserState.Error;
             break;
         }
             
@@ -869,6 +890,7 @@ class ReadablePushdownParser{
             this.state.currentState = ParserState.Error;
             break;
         }
+	return this.state.currentState;
     }
 }
 
@@ -877,7 +899,7 @@ let get_value_type_state = (c) => {
     if (c == SB_FLAG_UNDEFINED || c == SB_FLAG_I8 || c == SB_FLAG_I16 || c == SB_FLAG_I32 ||
         c == SB_FLAG_I64 || c == SB_FLAG_FLOAT || c == SB_FLAG_DOUBLE ||
         c == SB_FLAG_LONG_DOUBLE || c == SB_FLAG_BOOLEAN ||
-        c == SB_FLAG_STRING || c == COMPOUND_NODE_BEGIN_FLAG_R || c == COMPOUND_NODE_BEGIN_ARRAY_R)
+        c == SB_FLAG_STRING || c == COMPOUND_NODE_BEGIN_FLAG_R || c == COMPOUND_NODE_BEGIN_LIST_R)
         state = ParserState.AwaitValue;
     if (_is_ascii_whitespace(c))
         state = ParserState.AwaitValueTypeIdentifier;
@@ -1160,6 +1182,11 @@ class CompoundNode{
     }
     get_node_list(key){
         return this.child_node_lists[key]
+    }
+    get_node_list_length(key){
+	if(this.child_node_lists[key] == undefined)
+	    this.child_node_lists[key] = []
+	return this.child_node_lists[key].length
     }
 
     copyTo(target){

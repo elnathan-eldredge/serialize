@@ -1370,45 +1370,45 @@ namespace Serialize{
       }
 
       case AwaitValueTypeIdentifier: {
-        state.current_state = get_value_type_state(c);
-        if (state.current_state == Error)
-          break;
-        if (state.current_state == AwaitValue)
-          state.current_value_type = c;
-        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-          state.current_state = AwaitItemSeperator;
-          state_stack.push(state);
-          state = fresh_parser_data_h();
-          state.current_state = AwaitKey;
-          break;
-        }
-        if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
-          state.current_state = ConstructNodeArrayAwaitNode;
-          break;
-        }
-        break;
+       	  state.current_state = get_value_type_state(c);
+       	  if (state.current_state == Error)
+       	    break;
+       	  if (state.current_state == AwaitValue)
+       	    state.current_value_type = c;
+       	  if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+       	    state.current_state = AwaitItemSeperator;
+       	    state_stack.push(state);
+       	    state = fresh_parser_data_h();
+       	    state.current_state = AwaitKey;
+       	    break;
+       	  }
+       	  if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+       	    state.current_state = ConstructNodeArrayAwaitNode;
+       	    break;
+       	  }
+       	  break;
       }
-        
-      case AwaitKeyValueSeperator: {
-        if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
-          state.current_state = AwaitValueTypeIdentifier;
-          break;
-        }
-        if (!_is_ascii_whitespace(c))
-          state.current_state = Error;
-        break;
+       	  
+      c	 ase AwaitKeyValueSeperator: {
+       	  if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+       	    state.current_state = AwaitValueTypeIdentifier;
+       	    break;
+       	  }
+       	  if (!_is_ascii_whitespace(c))
+       	    state.current_state = Error;
+       	  break;
       }
-        
-      case ConstructKeyEscape: {
-        if (c == COMPOUND_NODE_END_STRING_R) {
-          state.current_construction += c;
-          state.current_state = ConstructKey;
-          break;
-        }
-        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
-          state.current_construction += c;
-          break;
-        }
+       	  
+      c	 ase ConstructKeyEscape: {
+       	  if (c == COMPOUND_NODE_END_STRING_R) {
+       	    state.current_construction += c;
+       	    state.current_state = ConstructKey;
+       	    break;
+       	  }
+       	  if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+       	    state.current_construction += c;
+       	    break;
+       	  }
         state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
         state.current_construction += c;
         state.current_state = ConstructKey;
