@@ -127,7 +127,7 @@ state = BasicParserState;
 
 for(let c of generatedByOtherProgramR){
     let state = parserR.consume(c);
-    console.log(state, c)
+//    console.log(state, c)
     if(state == ParserState.Error){
         console.log("parser error (readable)")
         break;
@@ -143,3 +143,6 @@ for(let c of generatedByOtherProgramR){
     }
 }
 
+console.log(parserR.state.node)
+
+console.log("deserialized from other program (readable):", node.serialize_readable())

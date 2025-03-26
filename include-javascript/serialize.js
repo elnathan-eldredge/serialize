@@ -758,7 +758,7 @@ class ReadableParserData{
     currentConstruction = ""
     currentValueType = 0
     currentKey = ""
-    value_construction = []
+    valueConstruction = []
     constructor(){}
 }
 
@@ -770,16 +770,186 @@ class ReadablePushdownParser{
     consume(c){
         switch(this.state.currentState){
 
-	 
+        case ParserState.Warning: {
+            this.state.currentState = ParserState.Error;
+        }
+            
+        case ParserState.AwaitValueParsableSeperator: {
+            if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
+                this.state.currentState = ParserState.AwaitValueParsable;
+                break;
+            }
+            if (c == COMPOUND_NODE_END_ARRAY_R) {
+                this.state.valueConstructions.push(this.state.currentConstruction);
+                this.state.currentConstruction = "";
+                if (!parse_insert_generic(this.state.node, this.state.currentKey,
+                                          this.state.valueConstructions,
+                                          this.state.currentValueType)) {
+                    this.state.currentState = ParserState.Error;
+                    this.state.valueConstruction = [];
+                    break;
+                }
+                this.state.currentState = ParserState.AwaitItemSeperator;
+                this.state.valueConstructions = [];
+                break;
+            }
+            if (!_is_ascii_whitespace(c)) {
+                state.current_state = Error;
+                break;
+            }
+            break;
+        }
+
+        case ParserState.ConstructValueParsable: {
+            if (c == COMPOUND_NODE_END_LIST_R) {
+                this.state.valueConstruction.push(this.state.currentConstruction);
+                this.state.currentConstruction = "";
+                if (!parse_insert_generic(this.state.node, this.state.currentKey,
+                                          this.state.valueConstruction,
+                                          this.state.currentValueType)) {
+                    this.state.currentState = ParserState.Error;
+                    this.state.valueConstruction = []
+                    break;
+                }
+                this.state.currentState = ParserState.AwaitItemSeperator;
+                this.state.valueConstruction = []
+                break;
+            }
+            if (_is_ascii_whitespace(c)) {
+                this.state.valueConstructions.push(this.state.currentConstruction);
+                this.state.currentConstruction = "";
+                this.state.currentState = ParserState.AwaitValueParsableSeperator;
+                break;
+            }
+            if (c == COMPOUND_NODE_VALUE_SEPERATOR_R) {
+                this.state.valueConstruction.push(this.state.currentConstruction);
+                this.state.currentConstruction = "";
+                this.state.currentState = ParserState.AwaitValueParsable;
+                break;
+            }
+            this.state.currentConstruction += c;
+            break;
+        }
+            
+        case ParserState.AwaitValueParsable: {
+            if (c == COMPOUND_NODE_END_LIST_R) {
+                if (this.state.valueConstruction.length != 0) {
+                    this.state.currentState = ParserState.Error;
+                    break;
+                }
+                if (!parse_insert_generic(this.state.node, this.state.currentKey, [],
+                                          this.state.currentValueType)) {
+                    this.state.currentState = ParserState.Error;
+                } else {
+                    this.state.currentState = ParserState.AwaitItemSeperator;
+                }
+                this.state.currentState = ParserState.AwaitItemSeperator;
+                break;
+            }
+            if (c == COMPOUND_NODE_VALUE_SEPERATOR_R) {
+                this.state.currentState = ParserState.Error;
+                break;
+            }
+            if (!_is_ascii_whitespace(c)) {
+                this.state.currentState = ParserState.ConstructValueParsable;
+                this.state.currentConstruction += c;
+            }
+            break;
+        }
+            
+        case ParserState.ConstructValueString: {
+            if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+                this.state.currentState = ParserState.ConstructValueStringEscape;
+                break;
+            }
+            if (c == COMPOUND_NODE_END_STRING_FLAG_R) {
+                this.state.node.put(this.state.currentKey, this.state.currentConstruction);
+                
+                this.state.currentKey = "";
+                this.state.currentConstruction = "";
+                this.state.currentState = ParserState.AwaitItemSeperator;
+                break;
+            }
+            this.state.currentConstruction += c;
+            break;
+        }
+
+        case ParserState.ConstructValueStringEscape: {
+            if (c == COMPOUND_NODE_END_STRING_FLAG_R) {
+                this.state.currentConstruction += c;
+                break;
+            }
+            if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+                this.state.currentConstruction += c;
+                break;
+            }
+            this.state.currentConstruction += COMPOUND_NODE_ESCAPE_STRING_R;
+            this.state.currentConstruction += c;
+            this.state.currentState = ParserState.ConstructValueString;
+            break;
+        }
+
+        case ParserState.AwaitValue: {
+            if (c == COMPOUND_NODE_BEGIN_LIST_R && this.state.currentValueType != SB_FLAG_STRING) {
+                this.state.currentState = ParserState.AwaitValueParsable;
+                break;
+            }
+            if (c == COMPOUND_NODE_BEGIN_STRING_FLAG_R && this.state.currentValueType == SB_FLAG_STRING) {
+                this.state.currentConstruction = "";
+                this.state.currentState = ParserState.ConstructValueString;
+                break;
+            }
+            if (!_is_ascii_whitespace(c))
+                this.state.currentState = ParserState.Error;
+            break;
+        }
+
+        case ParserState.AwaitItemSeperator: {
+            if (c == COMPOUND_NODE_VALUE_SEPERATOR_R) {
+                this.state.currentState = ParserState.AwaitKey;
+                break;
+            }
+            if (c == COMPOUND_NODE_END_FLAG_R && this.stateStack.length == 0) {
+                this.state.currentState = ParserState.Success;
+                break;
+            }
+            if (c == COMPOUND_NODE_END_FLAG_R && !this.stateStack.length==0) {
+                if (this.stateStack[this.stateStack.length-1].currentState == ParserState.AwaitItemSeperator) {
+                    this.stateStack[this.stateStack.length-1].node.put_node(this.stateStack[this.stateStack.length-1].currentKey, this.state.node);
+                } else if (this.stateStack[this.stateStack.length-1].currentState == ParserState.ConstructNodeArrayAwaitSeperator) {
+                    this.stateStack[this.stateStack.length-1].node.put_back(this.stateStack[this.stateStack.length-1].currentKey, this.state.node);
+                }
+                this.state = this.stateStack.pop();
+                break;
+            }
+            if (!_is_ascii_whitespace(c))
+                this.state.currentState = ParserState.Error;
+            break;
+        }
+            
+	case ParserState.ConstructNodeArrayAwaitSeperator: { 
+            if (c == COMPOUND_NODE_VALUE_SEPERATOR_R) {
+                this.state.currentState = ParserState.ConstructNodeArrayAwaitNode;
+                break;
+            }
+            if (c == COMPOUND_NODE_END_LIST_R) {
+                this.state.currentKey = "";
+                this.state.currentState = ParserState.AwaitItemSeperator;
+                break;
+            }
+            if (!_is_ascii_whitespace(c))
+                this.state.currentState = Error;
+            break;
+        }
 	    
 	case ParserState.ConstructNodeArrayAwaitNode: {
             if (c == COMPOUND_NODE_END_LIST_R && this.state.node.get_node_list_length(this.state.currentKey) == 0) {
-		this.state.current_key = "";
-		this.state.current_state = ParserState.AwaitItemSeperator;
+		this.state.currentKey = "";
+		this.state.currentState = ParserState.AwaitItemSeperator;
 		break;
             }
             if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-		this.state.current_state = ParserState.ConstructNodeArrayAwaitSeperator;
+		this.state.currentState = ParserState.ConstructNodeArrayAwaitSeperator;
 		this.stateStack.push(this.state);
 		this.state = new ReadableParserData();
 		this.state.currentState = ParserState.AwaitKey;
@@ -839,7 +1009,7 @@ class ReadablePushdownParser{
         case ParserState.ConstructKey: {
             if(c == COMPOUND_NODE_END_STRING_FLAG_R) {
                 this.state.currentState = ParserState.AwaitKeyValueSeperator;
-                this.state.currentKey = this.state.current_construction;
+                this.state.currentKey = this.state.currentConstruction;
                 this.state.currentConstruction = "";
                 break;
             }
@@ -946,8 +1116,20 @@ let _safe_iparse = (str,successcontainer) => {
     let num;
     num = parseInt(str)
     if(num == NaN)
-        succescontainer["success"] = false
-    succescontainer["success"] = true
+        successcontainer["success"] = false
+    successcontainer["success"] = true
+    return num
+}
+
+let _safe_biparse = (str,successcontainer) => {
+    let num;
+    try{
+        num = BigInt(str)
+    } catch(e) {
+        successcontainer["success"] = false
+        return;
+    }
+    successcontainer["success"] = true
     return num
 }
 
@@ -955,15 +1137,15 @@ let _safe_fparse = (str,successcontainer) => {
     let num;
     num = parseFloat(str)
     if(num == NaN)
-        succescontainer["success"] = false
-    succescontainer["success"] = true
+        successcontainer["success"] = false
+    successcontainer["success"] = true
     return num    
 }
 
 let parse_insert_generic = (noderef, key, array, parse_type) => {
     switch(parse_type){
     case SB_FLAG_UNDEFINED: {
-        noderef.put(key, new Uint8Array(), 1, Uint8Array).assign_meta(SB_META_UNDEFINE);
+        noderef.put(key, new Uint8Array(), 1, Uint8Array).assign_meta(SB_META_UNDEFINED);
         return true;
         break;
     }
@@ -975,7 +1157,7 @@ let parse_insert_generic = (noderef, key, array, parse_type) => {
             if(result.success == false)
                 return false
         }
-        node.put(key,new Int8Array(arr), 1, Int8Array).assign_meta(SB_META_INT_STLE)
+        node.put(key,new Int8Array(arr), 1, Int8Array).assign_meta(SB_META_INT_STYLE)
         return true
         break;
     }
@@ -1007,11 +1189,11 @@ let parse_insert_generic = (noderef, key, array, parse_type) => {
         let arr = []
         for(let str of array){
             let result = {}
-            arr.push(_safe_iparse(str,result))
+            arr.push(_safe_biparse(str,result))
             if(result.success == false)
                 return false
         }
-        node.put(key,new Int32Array(arr), 8, Int64Array).assign_meta(SB_META_INT_STYLE)
+        node.put(key,new BigInt64Array(arr), 8, BigInt64Array).assign_meta(SB_META_INT_STYLE)
         return true
         break;        
     }

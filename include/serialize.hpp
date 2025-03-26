@@ -1389,7 +1389,7 @@ namespace Serialize{
        	  break;
       }
        	  
-      c	 ase AwaitKeyValueSeperator: {
+      case AwaitKeyValueSeperator: {
        	  if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
        	    state.current_state = AwaitValueTypeIdentifier;
        	    break;
@@ -1399,7 +1399,7 @@ namespace Serialize{
        	  break;
       }
        	  
-      c	 ase ConstructKeyEscape: {
+      case ConstructKeyEscape: {
        	  if (c == COMPOUND_NODE_END_STRING_R) {
        	    state.current_construction += c;
        	    state.current_state = ConstructKey;
