@@ -1,16 +1,16 @@
-### `serailize.`
+### `serialize.`
 
 ---
 
 **`class SizedBlock`**
 
-A class representing a block of raw data (with some additional segments for size, division, and metadata). The only use for this in the typical use case is for assigning meta to hint a way to represent data in the readable serailziation.
+A class representing a block of raw data (with some additional segments for size, division, and metadata). The only use for this in the typical use case is for assigning meta to hint a way to represent data in the readable serialization.
 
 ---
 
 **`class CompoundNode`**
 
-A data structure node that contains the following in seperate maps:
+A data structure node that contains the following in separate maps:
 
 - "generic tags" - items used to store raw or otherwise usable data
 - "child nodes" - subnodes
@@ -24,7 +24,7 @@ A data structure node that contains the following in seperate maps:
 **`SB_META_BOOLEAN`**
 **`SB_META_STRING`**
 
-Various constants representing possible values to use in `SizedBlock.assign_meta`, each representing a desired representation to use if the readable serailization is used. **`SB_META_UNDEFINED`** is the default value.
+Various constants representing possible values to use in `SizedBlock.assign_meta`, each representing a desired representation to use if the readable serialization is used. **`SB_META_UNDEFINED`** is the default value.
 
 ---
 
@@ -40,7 +40,7 @@ A constant representing the maximum value a reserved constant (used for an assig
 
 **`assign_meta(meta)`**
 
-Assign the given meta (converted to an eight bit unsigned integer) to the tag element. The built-in constants can be assigned to hint to the serializer what way the data should be represented in the readable serialization.
+Assign the given meta (converted to an eight bit unsigned integer) to the tag element. The built-in constants can be assigned to hint to the serialize what way the data should be represented in the readable serialization.
 
 ---
         
@@ -94,49 +94,49 @@ Appends a node to an existing or nonexisting array, creating an array if the cas
 
 **`has_compat(key, arrtype)`**
 
-Returns wether there is a generic tag that can be used as a single value of the array type. I.E. is a singe value with a segmentation identical to `arrtype`.
+Returns whether there is a generic tag that can be used as a single value of the array type. I.E. is a singe value with a segmentation identical to `arrtype`.
 
 ---
 
 **`has_compat_array(key, arrtype)`**
 
-Returns wether there is a generic tag that can be used as a single or multiple values of the array type. I.E. is a value or array with a segmentation identical to `arrtype`.
+Returns whether there is a generic tag that can be used as a single or multiple values of the array type. I.E. is a value or array with a segmentation identical to `arrtype`.
 
 ---
 
 **`has_node(key)`**
 
-Returns wether there is an immediate child node referred to by the key
+Returns whether there is an immediate child node referred to by the key
 
 ---
 
 **`has_node_list(key)`**
 
-Returns wether there is an immediate child node list referred to by the key
+Returns whether there is an immediate child node list referred to by the key
 
 ---
 
 **`empty()`**
 
-Returns wether the node is empty in all respects
+Returns whether the node is empty in all respects
 
 ---
 
 **`get(key, optionalcast)`**
 
-Retrieves the value assiociated by the key as an `Uint8Array`, or, if specified by `optional cast`, as the associated typed array. Returns undefined if there is none.
+Retrieves the value associated by the key as an `Uint8Array`, or, if specified by `optional cast`, as the associated typed array. Returns undefined if there is none.
 
 ---
 
 **`get_ref(key, optionalcast)`**
 
-Retrieves the value assiociated by the key as a refrence to an `Uint8Array`, or, if specified by `optional cast`, as a refrences to the associated typed array. Returns undefined if there is none.
+Retrieves the value associated by the key as a reference to an `Uint8Array`, or, if specified by `optional cast`, as a references to the associated typed array. Returns undefined if there is none.
 
 ---
 
 **`get_node(key)`**
     
-Retrieves the associated node by refrence. Returns undefined if there is none.
+Retrieves the associated node by reference. Returns undefined if there is none.
 
 ---
 
@@ -160,7 +160,7 @@ Creates a copy of its data on the target node, its member(s) taking precedence i
 
 **`has_symbol(key)`**
 
-Returns wether there is a generic tag, child node, or child node list associated with the key.
+Returns whether there is a generic tag, child node, or child node list associated with the key.
 
 ---
 
@@ -178,19 +178,19 @@ Returns a string, Base64 encoded, representing all data within the node.
 
 **`serialize_readable()`**
 
-Returns a string, human readable and editable, representing data within the node. There is no defined guarentee that the data within generic tags is preserved if there is no meta defining a representation in this readable serialization.
+Returns a string, human readable and editable, representing data within the node. There is no defined guarantee that the data within generic tags is preserved if there is no meta defining a representation in this readable serialization.
 
 ---
 
 **`deserialize(content)`**
 
-Deserialize from an `Uint8Array`. Returns wether the deserailization was a success (`true`) or a failure (`false`).
+Deserialize from an `Uint8Array`. Returns whether the deserailization was a success (`true`) or a failure (`false`).
 
 ---
 
 **`deserialize_decode(content)`**
 
-Deserialize from a Base64 encoded string. Returns wether the deserailization was a success (`true`) or a failure (`false`).
+Deserialize from a Base64 encoded string. Returns weather the deserailization was a success (`true`) or a failure (`false`).
 
 ---
 
@@ -202,4 +202,4 @@ Remove all data from the node in all respects. `empty()` will return true.
 
 **`deserialize_readable(content)`**{
 
-Deserailize from a string with the human-readable notation. Returns wether the deserailization was a success (`true`) or a failure (`false`).
+Deserailize from a string with the human-readable notation. Returns weather the deserailization was a success (`true`) or a failure (`false`).

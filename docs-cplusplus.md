@@ -50,7 +50,7 @@ Constructor. Constructs an empty node.
 
 `template<typename T> void put(std::string key, T var)`
 
-Insert a tag with the respective key and value. This will safley override and replace an existing tag, if present.
+Insert a tag with the respective key and value. This will safely override and replace an existing tag, if present.
 
 ---
 
@@ -160,9 +160,9 @@ Recursively copy to another node. This erases the target node first.
 
 ---
 
-**[DEPRECATED]** `std::string similair_json()`
+**[DEPRECATED]** `std::string similar_json()`
 
-For debugging, it returns a pseudocode representation of the data structure. Please note that some tags may display as the pointer address.
+For debugging, it returns a pseudo-code representation of the data structure. Please note that some tags may display as the pointer address.
 
 ---
 
@@ -204,7 +204,7 @@ Deserializes from a base64 encoded serialization.
 
 `std::string serialize_readable()`
 
-Serialize into a human-readable notation. There is no defined guarentee that the data within generic tags with no defined meta is preserved.
+Serialize into a human-readable notation. There is no defined guarantee that the data within generic tags with no defined meta is preserved.
 
 ---
 
