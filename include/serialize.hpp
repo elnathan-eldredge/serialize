@@ -564,6 +564,7 @@ namespace Serialize{
       switch (meta) {
       case SB_META_INT_STYLE:{
         switch (bloc->element_span) {
+        default:
         case sizeof(int8_t):
           for (un_size_t i = 0; i < bloc->span; i += bloc->element_span) {
             d += _ptts<int8_t>((int8_t *)((char *)bloc->contents_native + size_t(i)));
@@ -652,8 +653,6 @@ namespace Serialize{
 
     Readable::PushdownParser parser = Readable::PushdownParser();
 
-    destroy_children();
-
     std::vector<char>::iterator it;
     for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
       Readable::ParserState state = parser.consume(*it);
@@ -667,7 +666,10 @@ namespace Serialize{
     }
 
     if(endidx != nullptr)
-      *endidx = it - vdata.begin();
+      *endidx =
+        it - vdata.begin();
+
+    destroy_children();
 
     parser.merge_to(this);
     
@@ -1368,45 +1370,45 @@ namespace Serialize{
       }
 
       case AwaitValueTypeIdentifier: {
-        state.current_state = get_value_type_state(c);
-        if (state.current_state == Error)
-          break;
-        if (state.current_state == AwaitValue)
-          state.current_value_type = c;
-        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-          state.current_state = AwaitItemSeperator;
-          state_stack.push(state);
-          state = fresh_parser_data_h();
-          state.current_state = AwaitKey;
-          break;
-        }
-        if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
-          state.current_state = ConstructNodeArrayAwaitNode;
-          break;
-        }
-        break;
+       	  state.current_state = get_value_type_state(c);
+       	  if (state.current_state == Error)
+       	    break;
+       	  if (state.current_state == AwaitValue)
+       	    state.current_value_type = c;
+       	  if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+       	    state.current_state = AwaitItemSeperator;
+       	    state_stack.push(state);
+       	    state = fresh_parser_data_h();
+       	    state.current_state = AwaitKey;
+       	    break;
+       	  }
+       	  if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+       	    state.current_state = ConstructNodeArrayAwaitNode;
+       	    break;
+       	  }
+       	  break;
       }
-        
+       	  
       case AwaitKeyValueSeperator: {
-        if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
-          state.current_state = AwaitValueTypeIdentifier;
-          break;
-        }
-        if (!_is_ascii_whitespace(c))
-          state.current_state = Error;
-        break;
+       	  if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+       	    state.current_state = AwaitValueTypeIdentifier;
+       	    break;
+       	  }
+       	  if (!_is_ascii_whitespace(c))
+       	    state.current_state = Error;
+       	  break;
       }
-        
+       	  
       case ConstructKeyEscape: {
-        if (c == COMPOUND_NODE_END_STRING_R) {
-          state.current_construction += c;
-          state.current_state = ConstructKey;
-          break;
-        }
-        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
-          state.current_construction += c;
-          break;
-        }
+       	  if (c == COMPOUND_NODE_END_STRING_R) {
+       	    state.current_construction += c;
+       	    state.current_state = ConstructKey;
+       	    break;
+       	  }
+       	  if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+       	    state.current_construction += c;
+       	    break;
+       	  }
         state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
         state.current_construction += c;
         state.current_state = ConstructKey;
