@@ -558,7 +558,7 @@ let serialize = {
         awaitCounter = 0;
         constructor(){};
         writeToNode(otherNode){
-            this.state.node.mergeTo(otherNode);
+            this.state.node.merge_to(otherNode);
         };
         consume(c){
 
@@ -1159,7 +1159,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Int8Array(arr), 1, Int8Array).assign_meta(serialize.SB_META_INT_STYLE)
+            noderef.put(key,new Int8Array(arr), 1, Int8Array).assign_meta(serialize.SB_META_INT_STYLE)
             return true
             break;
         }
@@ -1171,7 +1171,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Int16Array(arr), 2, Int16Array).assign_meta(serialize.SB_META_INT_STYLE)
+            noderef.put(key,new Int16Array(arr), 2, Int16Array).assign_meta(serialize.SB_META_INT_STYLE)
             return true
             break;        
         }
@@ -1183,7 +1183,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Int32Array(arr), 4, Int32Array).assign_meta(serialize.SB_META_INT_STYLE)
+            noderef.put(key,new Int32Array(arr), 4, Int32Array).assign_meta(serialize.SB_META_INT_STYLE)
             return true
             break;        
         }
@@ -1195,7 +1195,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new BigInt64Array(arr), 8, BigInt64Array).assign_meta(serialize.SB_META_INT_STYLE)
+            noderef.put(key,new BigInt64Array(arr), 8, BigInt64Array).assign_meta(serialize.SB_META_INT_STYLE)
             return true
             break;        
         }
@@ -1207,7 +1207,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Float32Array(arr), 4, Float32Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
+            noderef.put(key,new Float32Array(arr), 4, Float32Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
             return true
             break;        
         }
@@ -1219,7 +1219,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
+            noderef.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
             return true
             break;        
         }
@@ -1231,7 +1231,7 @@ let serialize = {
                 if(result.success == false)
                     return false
             }
-            node.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
+            noderef.put(key,new Float64Array(arr), 8, Float64Array).assign_meta(serialize.SB_META_FLOAT_STYLE)
             return true;
             break;        
         }
@@ -1246,7 +1246,7 @@ let serialize = {
                     return false
                 }
             }
-            node.put(key,new Uint8Array(arr),Uint8Array).assign_meta(serialize.SB_META_BOOLEAN)
+            noderef.put(key,new Uint8Array(arr),Uint8Array).assign_meta(serialize.SB_META_BOOLEAN)
             return true;
             break;
         }
@@ -1255,6 +1255,29 @@ let serialize = {
         }
         return false
     },
+
+    // put(string key, array_or_number value, int bytesperelement, class arraytype)
+    // put_node(string key, node/array_of_nodes node_or_array)
+    // put_back(string key, node anode)
+    // has_compat(string key, class arrtype)
+    // has_compat_array(string key, class arrtype)
+    // has_node(string key)
+    // has_node_list(string key)
+    // empty()
+    // get(string key, class optionalcast)
+    // get_ref(string key, class optionalcast)
+    // get_node(string key)
+    // get_node_list(string key)
+    // get_node_list_length(string key)
+    // merge_to(node target)
+    // has_symbol(string key)
+    // serialize()
+    // serialize_encode()
+    // serialize_readable()
+    // deserialize(numberarray content)
+    // deserialize_decode(string content)
+    // destroy_children()
+    // deserialize_readable(string content)
 
     CompoundNode : class {
         generic_tags = {};
@@ -1301,7 +1324,7 @@ let serialize = {
         put_node(key, node_or_array){
             if(typeof(node_or_array) == "object"){
                 let ncn = new serialize.CompoundNode()
-                node_or_array.mergeTo(ncn);
+                node_or_array.merge_to(ncn);
                 this.child_nodes[key] = ncn;
                 return;
             }
@@ -1317,7 +1340,7 @@ let serialize = {
             if(this.child_node_lists[key] == undefined)
                 this.child_node_lists[key] = [];
             let ncn = new serialize.CompoundNode();
-            anode.mergeTo(ncn);
+            anode.merge_to(ncn);
             this.child_node_lists[key].push(ncn);
             return ncn
         }
@@ -1325,14 +1348,14 @@ let serialize = {
         has_compat(key, arrtype){
             if(this.generic_tags[key] == undefined)
                 return false;
-            if(this.generic_tags[key].span != typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT)
+            if(this.generic_tags[key].span != (typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT))
                 return false;
             return true;
         }
         has_compat_array(key, arrtype){
             if(this.generic_tags[key] == undefined)
                 return false;
-            if(this.generic_tags[key].element_span != typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT)
+            if(this.generic_tags[key].element_span != (typeof(arrtype)=="number"?arrtype:arrtype.BYTES_PER_ELEMENT))
                 return false;
             return true;
         }
@@ -1347,9 +1370,9 @@ let serialize = {
 	    return Object.keys(this.generic_tags).length == 0 && Object.keys(this.child_nodes).length == 0 && Object.keys(this.child_node_lists).length == 0;
         }
         get(key, optionalcast){
-            if(!this.has_compat_array(key,optionalcast!=undefined?optionalcast.BYTES_PER_ELEMENT:1))
+            let contents = this.generic_tags[key]?.contents_native.buffer.slice();
+            if(contents == undefined)
                 return undefined;
-            let contents = this.generic_tags[key].contents_native.buffer.slice();
             if(optionalcast != undefined)
                 return new optionalcast(contents);
             return new Uint8Array(contents);
@@ -1373,7 +1396,7 @@ let serialize = {
 	    return this.child_node_lists[key].length
         }
 
-        mergeTo(target){
+        merge_to(target){
             for(let key in this.generic_tags){
                 let nsb = new serialize.SizedBlock();
                 this.generic_tags[key].copyTo(nsb);
@@ -1381,14 +1404,14 @@ let serialize = {
             }
             for(let key in this.child_nodes){
                 let ncn = new serialize.CompoundNode();
-                this.child_nodes[key].mergeTo(ncn);
+                this.child_nodes[key].merge_to(ncn);
                 target.put_node("key",ncn);
             }
             for(let key in this.child_node_lists){
                 let list = this.child_node_lists[key];
                 for(let lnode in list){
                     let ncn = new serialize.CompoundNode();
-                    list[lnode].mergeTo(ncn);
+                    list[lnode].merge_to(ncn);
                     target.put_back(key,ncn)
                 }
             }
@@ -1497,7 +1520,7 @@ let serialize = {
             if(state != serialize.BasicParserState.Success)
                 return false;
             this.destroy_children()
-            parser.state.node.mergeTo(this)
+            parser.state.node.merge_to(this)
             return true;
         }
         deserialize_decode(content){
@@ -1525,7 +1548,7 @@ let serialize = {
             if(state != serialize.BasicParserState.Success)
                 return false;
             this.destroy_children();
-            parser.state.node.mergeTo(this)
+            parser.state.node.merge_to(this)
             return true;
         }
     }

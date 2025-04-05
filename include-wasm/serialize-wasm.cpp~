@@ -1,8 +1,0 @@
-#include <emscripten.h>
-
-extern "C" {
-  EMSCRIPTEN_KEEPALIVE
-  int versiont(){
-    return 91800;
-  }
-}
