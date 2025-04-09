@@ -55,6 +55,7 @@ May 27, 2024
 
 #define COMPOUND_NODE_BEGIN_FLAG (char)123
 #define COMPOUND_NODE_END_FLAG (char)125
+#define COMPOUND_NODE_ESCAPE_KEY_FLAG (char)92
 #define COMPOUND_NODE_BEGIN_STRING_FLAG (char)44
 #define COMPOUND_NODE_BEGIN_ELEMENT_FLAG (char)58
 #define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)45
@@ -300,12 +301,23 @@ namespace Serialize{
     SizedBlock(uint16_t element_size, un_size_t element_count, void* data);
 
     std::vector<char> lower();
+
+    static constexpr un_size_t header_size_bytes(){
+      return sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
+    }
     
     SizedBlock(){
       span = 0;
       element_span = 0;
       contents_native = nullptr;
     };
+
+    static un_size_t interpret_size_from_header(std::vector<char>& data){
+      un_size_t dsize_u;
+      memcpy(&dsize_u,((char*)data.data()) + sizeof(uint8_t) + sizeof(uint16_t),sizeof(un_size_t));
+      un_size_t total_span = little_endian<un_size_t>(dsize_u);
+      return total_span;
+    }
 
     char* upper(char* data, char* max);
 
@@ -396,6 +408,49 @@ namespace Serialize{
 
     void destroy_children();
   };
+
+  namespace Binary {
+    class PushdownParser;
+
+    enum ParserState {
+      AwaitBegin,                //0
+      AwaitKeyStart,             //1
+      ConstructKey,              //2 
+      ConstructKeyEscape,        //3 
+      GetIndicator,              //4 
+      AwaitNodeArrayNode,        //5
+      AquireNodeHeader,          //6
+      AquireNodeData,            //7
+      Success,                   //8
+      Error,                     //9 
+      Warning                    //10
+    };
+
+    struct ParserData {
+      CompoundNode* node = NULL;
+      ParserState current_state = AwaitBegin;
+      std::string current_string = "";
+      std::string current_key = "";
+      std::vector<char> node_data;
+      uint64_t node_data_counter = 0;
+      uint64_t node_data_left = 0;
+    };
+
+    class PushdownParser{
+    public:
+      std::stack<ParserData> state_stack;
+      ParserData state;
+
+      PushdownParser();
+
+      ParserState consume(char c);
+
+      void merge_to(CompoundNode* node);
+
+      ~PushdownParser();
+    };
+    
+  }
 
   namespace Readable {
 
@@ -654,8 +709,9 @@ namespace Serialize{
     Readable::PushdownParser parser = Readable::PushdownParser();
 
     std::vector<char>::iterator it;
+    Readable::ParserState state = Readable::Warning;
     for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
-      Readable::ParserState state = parser.consume(*it);
+      state = parser.consume(*it);
       //      printf("%d \"%c\"\n",state,*it);
       if (state == Readable::Error)
         return false;
@@ -664,6 +720,9 @@ namespace Serialize{
       if (state == Readable::Success)
         break;
     }
+
+    if(state != Readable::Success)
+      return false;
 
     if(endidx != nullptr)
       *endidx =
@@ -734,7 +793,30 @@ namespace Serialize{
   
   
   bool CompoundNode::deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index){
-    if(data->size() == 0 || data->size() <= start_index) return false;
+    Binary::PushdownParser parser;
+    
+    std::vector<char>::iterator it;
+    Binary::ParserState state = Binary::Warning;
+    for (it = data->begin() + start_index; it != data->end(); ++it) {
+      state = parser.consume(*it);
+      printf("%d \"%c\" %d\n",state,*it,*it);
+      if (state == Binary::Error)
+        return false;
+      if (state == Binary::Success)
+        break;
+    }
+
+    if(state != Binary::Success)
+      return false;
+
+    if(end_index != nullptr)
+      *end_index = it - data->begin();
+
+    printf("parser node: %ld\n",parser.state.node);
+    destroy_children();
+    parser.merge_to(this);
+    return true;
+    /*    if(data->size() == 0 || data->size() <= start_index) return false;
     CompoundNode new_node;
     un_size_t index = start_index;
     un_size_t max_index = data->size() - 1;
@@ -801,7 +883,7 @@ namespace Serialize{
       *end_index = ++index;
     destroy_children();
     new_node.copy_to(this);
-    return true;
+    return true;*/
   }
 
   std::string _add_escapes_to_string(std::string str){
@@ -1091,7 +1173,7 @@ namespace Serialize{
     un_size_t span_d = little_endian<un_size_t>(span);
     contents.data()[0] = meta; //byte 1
     memcpy(contents.data()+sizeof(uint8_t),(char*)&element_d,sizeof(uint16_t)); //byte 2,3
-    memcpy(contents.data()+sizeof(uint8_t)+sizeof(uint16_t),(char*)&span_d,sizeof(un_size_t)); //bytes 3,4,5,6
+    memcpy(contents.data()+sizeof(uint8_t)+sizeof(uint16_t),(char*)&span_d,sizeof(un_size_t)); //bytes 3,4,5,6...
     void* contents_little_endian = contents_native;
     if(is_big_endian()){
       contents_little_endian = invert_endian_h(element_span, span/element_span, contents_native);
@@ -1108,6 +1190,8 @@ namespace Serialize{
     char* max = maxaddress + 1;
     if(max < data) return nullptr;
     if((uint64_t)(max - data) < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
+    meta = data[0];
+    printf("meta of new uppered node is :%d\n",meta);
     uint16_t element_size;
     memcpy(&element_size, data + sizeof(uint8_t), sizeof(uint16_t));
     element_span = little_endian<uint16_t>(element_size);// also goes from little to native
@@ -1125,7 +1209,6 @@ namespace Serialize{
       contents_native = malloc(span);
       memcpy(contents_native, data_after_header, span);
     }
-    meta = data[0];
     return data_after_header + span;
   }
 
@@ -1150,12 +1233,199 @@ namespace Serialize{
 
   #define PUSHDOWN_PARSER_TOKEN_WARNING_LENGTH_R 256
 
-  //Pushdown automaton parser
+  //Pushdown automaton parsers
+  namespace Binary{
+
+    ParserData fresh_parser_data_h();
+    void clean_parser_data(ParserData *);
+    
+    PushdownParser::PushdownParser(){state = fresh_parser_data_h();}
+
+    void PushdownParser::merge_to(CompoundNode* node){
+      printf("bout to copy, node: %s\n",state.node->serialize_readable(false).c_str());
+      state.node->copy_to(node);
+    }
+    
+    ParserState PushdownParser::consume(char c){
+      switch (state.current_state){
+
+      case AwaitNodeArrayNode:{
+        if(c == COMPOUND_NODE_END_LIST_FLAG){
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        break;
+      }
+
+      case AquireNodeData:{
+        state.node_data.push_back(c);
+        state.node_data_left--;
+        if(state.node_data_left <= 0){
+          if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
+            break;
+          SizedBlock* blk = new SizedBlock;
+          un_size_t end;
+          blk->upper(state.node_data,0);
+          //blk->assign_meta(SB_META_STRING);
+          state.node->generic_tags[state.current_key] = blk;
+          printf("upper'd block: meta:%d element_size:%d span:%d\n",blk->meta,blk->element_span,blk->span);
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        break;
+      }
+
+      case AquireNodeHeader:{
+        un_size_t headersize = SizedBlock::header_size_bytes();
+        state.node_data.push_back(c);
+        state.node_data_counter++;
+        if(state.node_data_counter < headersize - 1)
+          break;
+        if(state.node_data_counter == headersize - 1){
+          state.node_data_left = SizedBlock::interpret_size_from_header(state.node_data);
+          if(state.node_data_left == 0){
+            if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
+              break;
+            SizedBlock* nb = new SizedBlock();
+            nb->upper(state.node_data,0);
+            state.node->generic_tags[state.current_key] = nb;
+            state.current_state = AwaitKeyStart;
+            break;
+          }
+          state.current_state = AquireNodeData;
+          break;
+        }
+        state.current_state = Error;
+        break;
+      }
+
+      case GetIndicator:{
+        if(c == COMPOUND_NODE_BEGIN_BLOCK_FLAG){
+          state.current_state = AquireNodeHeader;
+          state.node_data.clear();
+          state.node_data_counter = 0;
+          state.node_data_left = 0;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state.current_state = AwaitKeyStart;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_LIST_FLAG){
+          state.current_state = AwaitNodeArrayNode;
+          break;
+        }
+        break;
+      }
+
+      case ConstructKeyEscape:{
+        if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
+          state.current_string += c;
+          state.current_state = ConstructKey;
+          break;
+        }
+        state.current_string += COMPOUND_NODE_BEGIN_ELEMENT_FLAG;
+        state.current_string += c; 
+        state.current_state = ConstructKey;
+        break;
+      }
+
+      case ConstructKey:{
+        if(c == COMPOUND_NODE_ESCAPE_KEY_FLAG){
+          state.current_state = ConstructKeyEscape;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
+          state.current_key = state.current_string;
+          state.current_string = "";
+          state.current_state = GetIndicator;
+          break;
+        }
+        state.current_string += c;
+        break;
+      }
+
+      case AwaitKeyStart:{
+        if(c == COMPOUND_NODE_BEGIN_STRING_FLAG){
+          state.current_state = ConstructKey;
+          state.current_string = "";
+          break;
+        }
+        if(c == COMPOUND_NODE_END_FLAG){
+          if(state_stack.size() == 0){
+            state.current_state = Success;
+            break;
+          }
+          if(state_stack.size() >= 0){
+            ParserState top_state = state_stack.top().current_state;
+            std::string top_key = state_stack.top().current_key;
+            if(top_state == AwaitKeyStart){
+              state_stack.top().node->put(top_key, state.node);
+            } else if (top_state == AwaitNodeArrayNode){
+              state_stack.top().node->put_back(top_key, *state.node);
+            } else {
+              state.current_state = Error;
+              break;
+            }
+            //pop from stack, deleting dynamic objects in state
+            clean_parser_data(&state);
+            state = state_stack.top();
+            state_stack.pop();
+            break;
+          }
+          state.current_state = Error;
+        }
+        break;
+      }
+
+      case AwaitBegin:{
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state.current_state = AwaitKeyStart;
+        }
+        break;
+      }
+
+      default:{
+        state.current_state = Error;
+      }
+      }
+
+      return state.current_state;
+    };
+
+    ParserData fresh_parser_data_h() {
+      return ParserData{.node = new CompoundNode(), .current_state = AwaitBegin, .current_string = "", .current_key = "", .node_data = std::vector<char>(), .node_data_counter = 0, .node_data_left = 0};
+    }
+
+    void clean_parser_data(ParserData *data) {
+      printf("cleaning parser data... node = %ld\n",data->node);
+      delete data->node;
+    }
+
+   PushdownParser::~PushdownParser(){
+      clean_parser_data(&state);
+      state.node = NULL;
+      while (!state_stack.empty()) {
+        clean_parser_data(&state_stack.top());
+        state_stack.pop();
+      }
+    };
+  } //namespace Binary
+
+  
   namespace Readable {
     
     ParserState get_value_type_state(char c);
     bool is_appropriate_value_start(char c, char ident);
-
     ParserData fresh_parser_data_h();
     void clean_parser_data(ParserData *);
     ssize_t elem_size(char);

@@ -1465,7 +1465,7 @@ let serialize = {
         }
         
         serialize_readable(){
-            let serialization = serialize.COMPOUND_NODE_BEGIN_FLAG_R
+ppp            let serialization = serialize.COMPOUND_NODE_BEGIN_FLAG_R
             let loop = 0;
             for(const key in this.generic_tags){
                 serialization += serialize.COMPOUND_NODE_BEGIN_STRING_FLAG_R
