@@ -819,7 +819,7 @@ namespace Serialize{
     Binary::ParserState state = Binary::Warning;
     for (it = data.begin() + start_index; it != data.end(); ++it) {
       state = parser.consume(*it);
-      //      printf("%d \"%c\" %d\n",state,*it,*it);
+      printf("state,d,d: %d \"%c\" %d\n",state,*it,*it);
       if (state == Binary::Error)
         return false;
       if (state == Binary::Success)

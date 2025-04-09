@@ -152,7 +152,7 @@ let serialize = {
     */
 
     SizedBlock : class{
-        contents_native = new Uint8Array();
+        contents_native = null;
         element_span = 0;
         span = 0;
         meta = 0;
@@ -226,8 +226,9 @@ let serialize = {
             this.dump();
             startindex = startindex==undefined?0:startindex;
             let errcannot = new Error("serialize.SizedBlock.upper: error deserializing")
-            if(uint8array.byteLength <= 11)
+            if(uint8array.byteLength < 11){
                 throw errcannot;
+            }
             let meta_a = new Uint8Array(uint8array.slice(startindex,startindex+1).buffer);
             let elemspan_a = new Uint16Array(uint8array.slice(startindex+1,startindex+3).buffer);
             let span_a = new BigUint64Array(uint8array.slice(startindex+3,startindex+11).buffer);
@@ -252,7 +253,7 @@ let serialize = {
         dump(){
             if(this.isdumped())
                 return;
-            this.contents_native = new Uint8Array();
+            this.contents_native = null;
             this.element_span = 0;
             this.span = 0;
             this.meta = 0;        
@@ -269,7 +270,7 @@ let serialize = {
             this.meta = meta;
         };
 
-        isdumped(){return this.span==0};
+        isdumped(){return this.contents_native==null};
         
     },
 
@@ -1465,7 +1466,7 @@ let serialize = {
         }
         
         serialize_readable(){
-ppp            let serialization = serialize.COMPOUND_NODE_BEGIN_FLAG_R
+            let serialization = serialize.COMPOUND_NODE_BEGIN_FLAG_R
             let loop = 0;
             for(const key in this.generic_tags){
                 serialization += serialize.COMPOUND_NODE_BEGIN_STRING_FLAG_R
