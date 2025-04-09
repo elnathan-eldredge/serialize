@@ -120,7 +120,7 @@ int main(){
   
   node.destroy_children();
 
-  if(!node.deserialize(&serialized, 0, nullptr)){
+  if(!node.deserialize(serialized, 0, nullptr)){
     puts("unable to deserialize Binary data\n");
   } else {
     printf("Deserialized contents from binary notation: \n\n%s\n\n", node.serialize_readable(false).c_str());
@@ -155,6 +155,61 @@ int main(){
   } else {
     printf("Cannot decode invalid RSSN\n");
   }
+
+  printf("##########################\nSerialization empty cases tests\n##########################\n");
+  printf("======== empty nodes should be parsed normally:\n\n");
+  //empty node
+  node.destroy_children();
+  std::vector<char> sb = node.serialize();
+  std::string se = node.serialize_encode();
+  std::string sr = node.serialize_readable(true);
+  printf("empty serializations:\n");
+  for(const char c: sb){
+    printf("%c",c);
+  }
+  printf(",\n%s,\n%s\n",se.c_str(),sr.c_str());
+  bool ssb = node.deserialize(sb,0,nullptr);
+  bool sse = node.decode_deserialize(se);
+  bool ssr = node.deserialize_readable(sr);
+  printf("end result:%s\n",node.serialize_readable(true).c_str());
+  printf("deserialize results (all should pass):%s,%s,%s\n\n",ssb?"pass":"fail",sse?"pass":"fail",ssr?"pass":"fail");
   
+  //empty string
+  node.destroy_children();
+  printf("======== empty values will be inserted,\nbut any null characters will be trimmed from strings in the readable\nserialization to disambiguate ends of strings\n (only printable characters are guarenteed preservation):\n\n");
+  node.put_string<char>("empty_string",0,"")->assign_meta(SB_META_STRING);
+  node.put_string<char>("a_second_empty_string",0,"")->assign_meta(SB_META_STRING);
+  printf("wer %ld\n",node.generic_tags.size());
+  sb = node.serialize();
+  se = node.serialize_encode();
+  sr = node.serialize_readable(true);
+  for(const char c: sb){
+    printf("%c",c);
+  }
+  printf(",\n%s,\n%s\n",se.c_str(),sr.c_str());
+  ssb = node.deserialize(sb,0,nullptr);
+  sse = node.decode_deserialize(se);
+  ssr = node.deserialize_readable(sr);
+  printf("end result:%s\n",node.serialize_readable(true).c_str());
+  printf("deserialize results (all should pass):%s,%s,%s\n\n",ssb?"pass":"fail",sse?"pass":"fail",ssr?"pass":"fail");
+  
+  //empty key
+  node.destroy_children();
+  printf("======== empty keys will work, but should not be used:\n\n");
+  node.put_string<char>("",4,"foo")->assign_meta(SB_META_STRING);
+  node.put_string<char>("a not empty key",4,"foo")->assign_meta(SB_META_STRING);
+  sb = node.serialize();
+  se = node.serialize_encode();
+  sr = node.serialize_readable(false);
+  printf("empty serializations:\n");
+  for(const char c: sb){
+    printf("%c",c);
+  }
+  printf(",\n%s,\n%s\n",se.c_str(),sr.c_str());
+  ssb = node.deserialize(sb,0,nullptr);
+  sse = node.decode_deserialize(se);
+  ssr = node.deserialize_readable(sr);
+  printf("end result:%s\n",node.serialize_readable(true).c_str());
+  printf("deserialize results (all should pass):%s,%s,%s\n\n",ssb?"pass":"fail",sse?"pass":"fail",ssr?"pass":"fail");  
   return 0;
 }

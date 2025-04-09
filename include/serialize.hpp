@@ -387,7 +387,7 @@ namespace Serialize{
 
     bool operator[](std::string key);
 
-    bool deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index);
+    bool deserialize(std::vector<char>& data, un_size_t start_index, un_size_t* end_index);
 
     std::string serialize_encode();
 
@@ -595,11 +595,26 @@ namespace Serialize{
   }
 
   std::string _add_escapes_to_string_readable(std::string str){
-    std::string new_string;
-    for(int i = 0; i < (ssize_t)str.length(); i ++){
-      if(str[i] == *"\"")
-        new_string += *"\\";
-      new_string += str[i];
+    std::string new_str = "";
+    for(const char c: str){
+      if(c == COMPOUND_NODE_END_STRING_R){
+        new_str += COMPOUND_NODE_ESCAPE_STRING_R;
+      }
+      new_str += c;
+    }
+    return new_str;
+  }
+
+  std::vector<char> _add_escapes_to_string_readable(std::vector<char> str){
+    std::vector<char> new_string;
+    for(const char c : str){
+      if(c == 0){
+        continue;
+      }
+      if(c == COMPOUND_NODE_END_STRING_R){
+        new_string.push_back(COMPOUND_NODE_ESCAPE_STRING_R);
+      }
+      new_string.push_back(c);
     }
     return new_string;
   }
@@ -611,7 +626,12 @@ namespace Serialize{
     if (flag == SB_FLAG_STRING) {
       d += flag;
       d += "\"";
-      d += _add_escapes_to_string_readable(std::string((char*)(bloc->contents_native)));
+      std::vector<char> strval = std::vector<char>(bloc->span);
+      memcpy(strval.data(),bloc->contents_native,strval.size());
+      std::vector<char> nval = _add_escapes_to_string_readable(strval);
+      for(const char nc: nval){
+        d += nc;
+      }
       d += "\"";
     } else {      
       d += flag;
@@ -779,7 +799,7 @@ namespace Serialize{
       return false;
     };
     std::vector<char> decoded = base64::decode(data);
-    return deserialize(&decoded, 0, nullptr);
+    return deserialize(decoded, 0, nullptr);
   }
   
   std::string CompoundNode::serialize_encode(){
@@ -792,14 +812,14 @@ namespace Serialize{
   }
   
   
-  bool CompoundNode::deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index){
-    Binary::PushdownParser parser;
+  bool CompoundNode::deserialize(std::vector<char>& data, un_size_t start_index, un_size_t* end_index){
+    Binary::PushdownParser parser = Binary::PushdownParser();
     
     std::vector<char>::iterator it;
     Binary::ParserState state = Binary::Warning;
-    for (it = data->begin() + start_index; it != data->end(); ++it) {
+    for (it = data.begin() + start_index; it != data.end(); ++it) {
       state = parser.consume(*it);
-      printf("%d \"%c\" %d\n",state,*it,*it);
+      //      printf("%d \"%c\" %d\n",state,*it,*it);
       if (state == Binary::Error)
         return false;
       if (state == Binary::Success)
@@ -810,9 +830,10 @@ namespace Serialize{
       return false;
 
     if(end_index != nullptr)
-      *end_index = it - data->begin();
+      *end_index = it - data.begin();
 
-    printf("parser node: %ld\n",parser.state.node);
+    //    printf("parser node: %ld\n",parser.state.node);
+    //    printf("parser seri: %s\n",parser.state.node->serialize_readable(false).c_str());
     destroy_children();
     parser.merge_to(this);
     return true;
@@ -1191,7 +1212,7 @@ namespace Serialize{
     if(max < data) return nullptr;
     if((uint64_t)(max - data) < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
     meta = data[0];
-    printf("meta of new uppered node is :%d\n",meta);
+    //    printf("meta of new uppered node is :%d\n",meta);
     uint16_t element_size;
     memcpy(&element_size, data + sizeof(uint8_t), sizeof(uint16_t));
     element_span = little_endian<uint16_t>(element_size);// also goes from little to native
@@ -1242,7 +1263,6 @@ namespace Serialize{
     PushdownParser::PushdownParser(){state = fresh_parser_data_h();}
 
     void PushdownParser::merge_to(CompoundNode* node){
-      printf("bout to copy, node: %s\n",state.node->serialize_readable(false).c_str());
       state.node->copy_to(node);
     }
     
@@ -1269,12 +1289,19 @@ namespace Serialize{
         if(state.node_data_left <= 0){
           if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
             break;
-          SizedBlock* blk = new SizedBlock;
-          un_size_t end;
+          SizedBlock* blk = new SizedBlock();
+          //          float f = 0.126;
+          //          SizedBlock* blk = new SizedBlock(sizeof(float),1,&f);
+          //          std::vector<char> l = blk->lower();
+          //          blk->upper(l,0);
           blk->upper(state.node_data,0);
-          //blk->assign_meta(SB_META_STRING);
+          //          blk->assign_meta(SB_META_FLOAT_STYLE);
           state.node->generic_tags[state.current_key] = blk;
-          printf("upper'd block: meta:%d element_size:%d span:%d\n",blk->meta,blk->element_span,blk->span);
+          for(char cd : state.node_data){
+            //            printf("%d,",cd);
+          }
+          //          printf("\nupper'd block: meta:%d element_size:%d span:%d\n",blk->meta,blk->element_span,blk->span);
+          //          state.node->put<float>("test",0.125)->assign_meta(SB_META_FLOAT_STYLE);
           state.current_state = AwaitKeyStart;
           break;
         }
@@ -1288,7 +1315,7 @@ namespace Serialize{
         if(state.node_data_counter < headersize - 1)
           break;
         if(state.node_data_counter == headersize - 1){
-          state.node_data_left = SizedBlock::interpret_size_from_header(state.node_data);
+          state.node_data_left = SizedBlock::interpret_size_from_header(state.node_data) + 1;
           if(state.node_data_left == 0){
             if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
               break;
@@ -1403,12 +1430,14 @@ namespace Serialize{
     };
 
     ParserData fresh_parser_data_h() {
-      return ParserData{.node = new CompoundNode(), .current_state = AwaitBegin, .current_string = "", .current_key = "", .node_data = std::vector<char>(), .node_data_counter = 0, .node_data_left = 0};
+      ParserData dat = ParserData{.node = new CompoundNode(), .current_state = AwaitBegin, .current_string = "", .current_key = "", .node_data = std::vector<char>(), .node_data_counter = 0, .node_data_left = 0};
+      //      printf("fresh parser data node = %ld\n",dat.node);
+      return dat;
     }
 
     void clean_parser_data(ParserData *data) {
-      printf("cleaning parser data... node = %ld\n",data->node);
       delete data->node;
+      data->node = nullptr;
     }
 
    PushdownParser::~PushdownParser(){
