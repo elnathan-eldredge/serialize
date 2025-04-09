@@ -167,8 +167,6 @@ console.log(transact)
 - (Due to be changed) Although buffers are read sequentially, there is no SAX interface.
 - Serializations temporarily reserve 8kb per nested element during serialization. Compile with SERIALIZE_NORESERVE defined to disable.
 
-## Documentation
-
 ## Resources
 
 ### Readable Serialization Specification Summary:
