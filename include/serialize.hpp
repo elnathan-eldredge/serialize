@@ -90,6 +90,11 @@ May 27, 2024
 #define SB_FLAG_BOOLEAN *"n"
 #define SB_FLAG_STRING *"s"
 
+#define READABLE_COMMENT_CHECK *"/"
+#define READABLE_ENDLINE_COMMENT_START *"/"
+#define READABLE_COMMENT_VARIABLE_DELIM *"*"
+#define READABLE_ENDLINE_DEFINITION 10
+
 #define serialize Serialize
 #define compound_node CompoundNode
 
@@ -454,8 +459,8 @@ namespace Serialize{
 
   namespace Readable {
 
-    class PushdownParser;
-
+  class PushdownParser;
+    
     enum ParserState {
       AwaitStart,                       // 0
       AwaitKey,                         // 1
@@ -472,9 +477,13 @@ namespace Serialize{
       ConstructNodeArrayAwaitNode,      // 12
       ConstructNodeArrayAwaitSeperator, // 13
       AwaitItemSeperator,               // 14
-      Success,                          // 15
-      Error,                            // 16
-      Warning                           // 17
+      CheckComment,                     // 15
+      EndlineComment,                   // 16
+      VariableComment,                  // 17
+      PossibleCommentEnd,               // 18
+      Success,                          // 19
+      Error,                            // 20
+      Warning                           // 21
     };
 
     struct ParserData {
@@ -1463,11 +1472,45 @@ namespace Serialize{
 
       switch (state.current_state) {
 
-      // The user's program shoud pause parsing for a warning
-      // to prevent possible buffer overflow. The warning state
-      // is reached only through attempting to parse unreasonably
-      // long tokens. The previous state before the warning is
-      // stored in state.next_state
+      case PossibleCommentEnd: {
+	if (c == READABLE_COMMENT_CHECK){
+	  state.current_state = state.next_state;
+	} else {
+	  state.current_state = VariableComment;
+	}
+	break;
+      }
+	
+      case VariableComment: {
+	if (c == READABLE_COMMENT_VARIABLE_DELIM)
+	  state.current_state = PossibleCommentEnd;
+	break;
+      }
+	
+      case EndlineComment: {
+	if (c == READABLE_ENDLINE_DEFINITION)
+	  state.current_state = state.next_state;
+	break;
+      }
+	
+      case CheckComment: {
+	if (c == READABLE_ENDLINE_COMMENT_START){
+	  state.current_state = EndlineComment;
+	  break;
+	}
+	if (c == READABLE_COMMENT_VARIABLE_DELIM){
+	  state.current_state = VariableComment;
+	  break;
+	}
+	state.current_state = Error;
+	break;
+      }
+
+        // The user's program shoud pause parsing for a warning
+        // to prevent possible buffer overflow. The warning state
+        // is reached only through attempting to parse unreasonably
+        // long tokens. The previous state before the warning is
+        // stored in state.next_state
       case Warning: {
         state.current_state = Error;
       }
@@ -1478,7 +1521,6 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_END_ARRAY_R) {
-          state.value_constructions.push_back(state.current_construction);
           state.current_construction = "";
           if (!parse_insert_generic(state.node, state.current_key,
                                     state.value_constructions,
@@ -1491,13 +1533,24 @@ namespace Serialize{
           state.value_constructions.clear();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c)) {
           state.current_state = Error;
           break;
         }
+        break;
       }
-        
+
       case ConstructValueParsable: {
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_END_ARRAY_R) {
           state.value_constructions.push_back(state.current_construction);
           state.current_construction = "";
@@ -1507,7 +1560,7 @@ namespace Serialize{
             state.current_state = Error;
             state.value_constructions.clear();
             break;
-           }
+          }
           state.current_state = AwaitItemSeperator;
           state.value_constructions.clear();
           break;
@@ -1549,6 +1602,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
           state.current_state = Error;
           break;
@@ -1567,8 +1625,8 @@ namespace Serialize{
         }
         if (c == COMPOUND_NODE_END_STRING_R) {
           state.node->put_string<char>(
-              state.current_key, state.current_construction.size()+1,
-              (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
+                                       state.current_key, state.current_construction.size()+1,
+                                       (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
           
           state.current_key = "";
           state.current_construction = "";
@@ -1604,6 +1662,11 @@ namespace Serialize{
           state.current_state = ConstructValueString;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1629,6 +1692,11 @@ namespace Serialize{
           state_stack.pop();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1644,6 +1712,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1655,6 +1728,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
           state.current_state = ConstructNodeArrayAwaitSeperator;
           state_stack.push(state);
@@ -1668,45 +1746,55 @@ namespace Serialize{
       }
 
       case AwaitValueTypeIdentifier: {
-       	  state.current_state = get_value_type_state(c);
-       	  if (state.current_state == Error)
-       	    break;
-       	  if (state.current_state == AwaitValue)
-       	    state.current_value_type = c;
-       	  if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-       	    state.current_state = AwaitItemSeperator;
-       	    state_stack.push(state);
-       	    state = fresh_parser_data_h();
-       	    state.current_state = AwaitKey;
-       	    break;
-       	  }
-       	  if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
-       	    state.current_state = ConstructNodeArrayAwaitNode;
-       	    break;
-       	  }
-       	  break;
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
+        state.current_state = get_value_type_state(c);
+        if (state.current_state == Error)
+          break;
+        if (state.current_state == AwaitValue)
+          state.current_value_type = c;
+        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          state.current_state = AwaitItemSeperator;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+          state.current_state = ConstructNodeArrayAwaitNode;
+          break;
+        }
+        break;
       }
        	  
       case AwaitKeyValueSeperator: {
-       	  if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
-       	    state.current_state = AwaitValueTypeIdentifier;
-       	    break;
-       	  }
-       	  if (!_is_ascii_whitespace(c))
-       	    state.current_state = Error;
-       	  break;
+        if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+          state.current_state = AwaitValueTypeIdentifier;
+          break;
+        }
+        if (c == READABLE_COMMENT_CHECK){
+          state.next_state = state.current_state;
+          state.current_state = CheckComment;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
       }
        	  
       case ConstructKeyEscape: {
-       	  if (c == COMPOUND_NODE_END_STRING_R) {
-       	    state.current_construction += c;
-       	    state.current_state = ConstructKey;
-       	    break;
-       	  }
-       	  if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
-       	    state.current_construction += c;
-       	    break;
-       	  }
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.current_construction += c;
+          state.current_state = ConstructKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_construction += c;
+          break;
+        }
         state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
         state.current_construction += c;
         state.current_state = ConstructKey;
@@ -1750,6 +1838,11 @@ namespace Serialize{
           state_stack.pop();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1760,6 +1853,11 @@ namespace Serialize{
           state.current_state = AwaitKey;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1994,7 +2092,6 @@ namespace Serialize{
   } // namespace Readable
 
 } // namespace Serialize
-
 
 #undef un_size_t
 #undef _return_if_EOF

@@ -21,6 +21,23 @@ Hashtable style serialization library
 - docs-cplusplus.md
 - docs-javascript.md
 
+## Sample of notation 
+```
+{
+	// single line comment
+	/* token terminated comment */
+	"key" : s"value",
+	"eight bit integer" : b[127],
+	"floating point number" : f[1.5],
+	"an array of sixteen bit integers" : m[ 257, 258, 259],
+	/*comments*/ "another key" /*can*/ : /*be*/ b[ /*used*/ 1 /*between*/ , /*tokens*/2 ],
+	"keys reperesent the
+	verbatim text except for \",
+        which is for quotes" : s"another value"
+}
+
+```
+
 ## Examples (c++)
 
 

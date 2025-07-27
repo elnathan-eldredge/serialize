@@ -144,6 +144,29 @@ int main(){
 
   node.destroy_children();
 
+  std::string comment_test = R"x(
+{
+	// single line comment
+	/* token terminated comment */
+	"key" : s"value",
+	"eight bit integer" : b[127],
+	"floating point number" : f[1.5],
+	"an array of sixteen bit integers" : m[ 257, 258, 259],
+	/*comments*/ "another key" /*can*/ : /*be*/ b[ /*used*/ 1 /*between*/ , /*tokens*/2 ],
+	"keys reperesent the
+	verbatim text except for \",
+        which is for quotes" : s"another value"
+}
+)x";
+
+  if (node.deserialize_readable(comment_test)) {
+    printf("comment test: \n\n%s\n\n", node.serialize_readable(false).c_str());
+  } else {
+    printf("Cannot decode comment test\n");
+  }
+
+  node.destroy_children();
+  
   std::string invalid_code = "{\r\n"
    "\"incomplete\" : n";
 
