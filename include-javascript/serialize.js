@@ -73,6 +73,11 @@ let serialize = {
     SB_FLAG_BOOLEAN : "n",
     SB_FLAG_STRING : "s",
 
+    READABLE_COMMENT_CHECK : "/",
+    READABLE_ENDLINE_COMMENT_START : "/",
+    READABLE_COMMENT_VARIABLE_DELIM : "*",
+    READABLE_ENDLINE_DEFINITION : "\n",
+    
     /*vector*/
 
     uVector : class{
@@ -749,10 +754,14 @@ let serialize = {
         ConstructNodeArrayAwaitNode      : 12,
         ConstructNodeArrayAwaitSeperator : 13,
         AwaitItemSeperator               : 14,
+        CheckComment                     : 15,
+        EndlineComment                   : 16,
+        VariableComment                  : 17,
+        PossibleCommentEnd               : 18,
         Success                          : 253,
         Error                            : 254,
         Warning                          : 255,
-    }), //left off
+    }),
 
     ReadableParserData : class {
         currentState = serialize.ParserState.AwaitStart
@@ -773,17 +782,50 @@ let serialize = {
         consume(c){
             switch(this.state.currentState){
 
+            case serialize.ParserState.PossibleCommentEnd: {
+	        if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.currentState = this.state.nextState;
+	        } else {
+	            this.state.currentState = serialize.ParserState.VariableComment;
+	        }
+	        break;
+            }
+	        
+            case serialize.ParserState.VariableComment: {
+	        if (c == serialize.READABLE_COMMENT_VARIABLE_DELIM)
+	            this.state.currentState = serialize.ParserState.PossibleCommentEnd;
+	        break;
+            }
+	        
+            case serialize.ParserState.EndlineComment: {
+	        if (c == serialize.READABLE_ENDLINE_DEFINITION)
+	            this.state.currentState = this.state.nextState;
+	        break;
+            }
+	        
+            case serialize.ParserState.CheckComment: {
+	        if (c == serialize.READABLE_ENDLINE_COMMENT_START){
+	            this.state.currentState = serialize.ParserState.EndlineComment;
+	            break;
+	        }
+	        if (c == serialize.READABLE_COMMENT_VARIABLE_DELIM){
+	            this.state.currentState = serialize.ParserState.VariableComment;
+	            break;
+	        }
+	        this.state.currentState = serialize.ParserState.Error;
+	        break;
+            }
+                
             case serialize.ParserState.Warning: {
                 this.state.currentState = serialize.ParserState.Error;
             }
                 
             case serialize.ParserState.AwaitValueParsableSeperator: {
-                if (c == serialize.COMPOUND_NODE_ITEM_SEPERATOR_R) {
+                if (c == serialize.COMPOUND_NODE_VALUE_SEPERATOR_R) {
                     this.state.currentState = serialize.ParserState.AwaitValueParsable;
                     break;
                 }
                 if (c == serialize.COMPOUND_NODE_END_ARRAY_R) {
-                    this.state.valueConstructions.push(this.state.currentConstruction);
                     this.state.currentConstruction = "";
                     if (!serialize.parse_insert_generic(this.state.node, this.state.currentKey,
                                                         this.state.valueConstructions,
@@ -796,8 +838,13 @@ let serialize = {
                     this.state.valueConstructions = [];
                     break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (!serialize._is_ascii_whitespace(c)) {
-                    state.current_state = Error;
+                    this.state.current_state = Error;
                     break;
                 }
                 break;
@@ -819,11 +866,16 @@ let serialize = {
                     break;
                 }
                 if (serialize._is_ascii_whitespace(c)) {
-                    this.state.valueConstructions.push(this.state.currentConstruction);
+                    this.state.valueConstruction.push(this.state.currentConstruction);
                     this.state.currentConstruction = "";
                     this.state.currentState = serialize.ParserState.AwaitValueParsableSeperator;
                     break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_VALUE_SEPERATOR_R) {
                     this.state.valueConstruction.push(this.state.currentConstruction);
                     this.state.currentConstruction = "";
@@ -849,6 +901,11 @@ let serialize = {
                     this.state.currentState = serialize.ParserState.AwaitItemSeperator;
                     break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_VALUE_SEPERATOR_R) {
                     this.state.currentState = serialize.ParserState.Error;
                     break;
@@ -893,6 +950,11 @@ let serialize = {
             }
 
             case serialize.ParserState.AwaitValue: {
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_BEGIN_LIST_R && this.state.currentValueType != serialize.SB_FLAG_STRING) {
                     this.state.currentState = serialize.ParserState.AwaitValueParsable;
                     break;
@@ -908,6 +970,11 @@ let serialize = {
             }
 
             case serialize.ParserState.AwaitItemSeperator: {
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_VALUE_SEPERATOR_R) {
                     this.state.currentState = serialize.ParserState.AwaitKey;
                     break;
@@ -930,7 +997,12 @@ let serialize = {
                 break;
             }
                 
-	    case serialize.ParserState.ConstructNodeArrayAwaitSeperator: { 
+	    case serialize.ParserState.ConstructNodeArrayAwaitSeperator: {
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_VALUE_SEPERATOR_R) {
                     this.state.currentState = serialize.ParserState.ConstructNodeArrayAwaitNode;
                     break;
@@ -951,6 +1023,11 @@ let serialize = {
 		    this.state.currentState = serialize.ParserState.AwaitItemSeperator;
 		    break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (c == serialize.COMPOUND_NODE_BEGIN_FLAG_R) {
 		    this.state.currentState = serialize.ParserState.ConstructNodeArrayAwaitSeperator;
 		    this.stateStack.push(this.state);
@@ -964,6 +1041,11 @@ let serialize = {
 	    }
 	        
             case serialize.ParserState.AwaitValueTypeIdentifier: {
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 this.state.currentState = serialize.get_value_type_state(c);
                 if (this.state.currentState == serialize.ParserState.Error)
                     break;
@@ -988,6 +1070,11 @@ let serialize = {
                     this.state.currentState = serialize.ParserState.AwaitValueTypeIdentifier;
                     break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if (!serialize._is_ascii_whitespace(c))
                     state.currentState = serialize.ParserState.Error;
                 break;
@@ -1029,6 +1116,11 @@ let serialize = {
                     this.state.currentState = serialize.ParserState.ConstructKey;
                     break;
                 }
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if(c == serialize.COMPOUND_NODE_END_FLAG_R && this.stateStack.length == 0 && this.state.node.empty()){
                     this.state.currentState = serialize.ParserState.Success;
                     break;
@@ -1050,6 +1142,11 @@ let serialize = {
             }
 
             case serialize.ParserState.AwaitStart:{
+                if (c == serialize.READABLE_COMMENT_CHECK){
+	            this.state.nextState = this.state.currentState;
+	            this.state.currentState = serialize.ParserState.CheckComment;
+	            break;
+	        }
                 if(c == serialize.COMPOUND_NODE_BEGIN_FLAG_R){
                     this.state.currentState = serialize.ParserState.AwaitKey;
                     break;

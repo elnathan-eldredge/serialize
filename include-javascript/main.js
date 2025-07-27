@@ -157,3 +157,22 @@ console.log("deserialized from other program (readable):", mnode.serialize_reada
 mnode.deserialize_readable(generatedByOtherProgramR)
 
 console.log(mnode)
+
+mnode.destroy_children();
+
+let data = String.raw`{
+	// single line comment
+	/* token terminated comment */
+	"key" : s"value",
+	"eight bit integer" : b[127],
+	"floating point number" : f[1.5],
+	"an array of sixteen bit integers" : m[ 257, 258, 259],
+	/*comments*/ "another key" /*can*/ : /*be*/ b[ /*used*/1 /*between*/ , /*tokens*/ 2], // and after lines
+	"keys reperesent the
+	verbatim text except for \",
+        which is for quotes" : s"another value"
+}`
+
+mnode.deserialize_readable(data)
+
+console.log("comment test:",mnode.serialize_readable())
