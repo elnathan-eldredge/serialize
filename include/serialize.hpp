@@ -55,6 +55,7 @@ May 27, 2024
 
 #define COMPOUND_NODE_BEGIN_FLAG (char)123
 #define COMPOUND_NODE_END_FLAG (char)125
+#define COMPOUND_NODE_ESCAPE_KEY_FLAG (char)92
 #define COMPOUND_NODE_BEGIN_STRING_FLAG (char)44
 #define COMPOUND_NODE_BEGIN_ELEMENT_FLAG (char)58
 #define COMPOUND_NODE_BEGIN_BLOCK_FLAG (char)45
@@ -88,6 +89,11 @@ May 27, 2024
 #define SB_FLAG_LONG_DOUBLE *"q"
 #define SB_FLAG_BOOLEAN *"n"
 #define SB_FLAG_STRING *"s"
+
+#define READABLE_COMMENT_CHECK *"/"
+#define READABLE_ENDLINE_COMMENT_START *"/"
+#define READABLE_COMMENT_VARIABLE_DELIM *"*"
+#define READABLE_ENDLINE_DEFINITION 10
 
 #define serialize Serialize
 #define compound_node CompoundNode
@@ -300,12 +306,23 @@ namespace Serialize{
     SizedBlock(uint16_t element_size, un_size_t element_count, void* data);
 
     std::vector<char> lower();
+
+    static constexpr un_size_t header_size_bytes(){
+      return sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
+    }
     
     SizedBlock(){
       span = 0;
       element_span = 0;
       contents_native = nullptr;
     };
+
+    static un_size_t interpret_size_from_header(std::vector<char>& data){
+      un_size_t dsize_u;
+      memcpy(&dsize_u,((char*)data.data()) + sizeof(uint8_t) + sizeof(uint16_t),sizeof(un_size_t));
+      un_size_t total_span = little_endian<un_size_t>(dsize_u);
+      return total_span;
+    }
 
     char* upper(char* data, char* max);
 
@@ -375,7 +392,7 @@ namespace Serialize{
 
     bool operator[](std::string key);
 
-    bool deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index);
+    bool deserialize(std::vector<char>& data, un_size_t start_index, un_size_t* end_index);
 
     std::string serialize_encode();
 
@@ -397,10 +414,53 @@ namespace Serialize{
     void destroy_children();
   };
 
-  namespace Readable {
-
+  namespace Binary {
     class PushdownParser;
 
+    enum ParserState {
+      AwaitBegin,                //0
+      AwaitKeyStart,             //1
+      ConstructKey,              //2 
+      ConstructKeyEscape,        //3 
+      GetIndicator,              //4 
+      AwaitNodeArrayNode,        //5
+      AquireNodeHeader,          //6
+      AquireNodeData,            //7
+      Success,                   //8
+      Error,                     //9 
+      Warning                    //10
+    };
+
+    struct ParserData {
+      CompoundNode* node = NULL;
+      ParserState current_state = AwaitBegin;
+      std::string current_string = "";
+      std::string current_key = "";
+      std::vector<char> node_data;
+      uint64_t node_data_counter = 0;
+      uint64_t node_data_left = 0;
+    };
+
+    class PushdownParser{
+    public:
+      std::stack<ParserData> state_stack;
+      ParserData state;
+
+      PushdownParser();
+
+      ParserState consume(char c);
+
+      void merge_to(CompoundNode* node);
+
+      ~PushdownParser();
+    };
+    
+  }
+
+  namespace Readable {
+
+  class PushdownParser;
+    
     enum ParserState {
       AwaitStart,                       // 0
       AwaitKey,                         // 1
@@ -417,9 +477,13 @@ namespace Serialize{
       ConstructNodeArrayAwaitNode,      // 12
       ConstructNodeArrayAwaitSeperator, // 13
       AwaitItemSeperator,               // 14
-      Success,                          // 15
-      Error,                            // 16
-      Warning                           // 17
+      CheckComment,                     // 15
+      EndlineComment,                   // 16
+      VariableComment,                  // 17
+      PossibleCommentEnd,               // 18
+      Success,                          // 19
+      Error,                            // 20
+      Warning                           // 21
     };
 
     struct ParserData {
@@ -540,11 +604,26 @@ namespace Serialize{
   }
 
   std::string _add_escapes_to_string_readable(std::string str){
-    std::string new_string;
-    for(int i = 0; i < (ssize_t)str.length(); i ++){
-      if(str[i] == *"\"")
-        new_string += *"\\";
-      new_string += str[i];
+    std::string new_str = "";
+    for(const char c: str){
+      if(c == COMPOUND_NODE_END_STRING_R){
+        new_str += COMPOUND_NODE_ESCAPE_STRING_R;
+      }
+      new_str += c;
+    }
+    return new_str;
+  }
+
+  std::vector<char> _add_escapes_to_string_readable(std::vector<char> str){
+    std::vector<char> new_string;
+    for(const char c : str){
+      if(c == 0){
+        continue;
+      }
+      if(c == COMPOUND_NODE_END_STRING_R){
+        new_string.push_back(COMPOUND_NODE_ESCAPE_STRING_R);
+      }
+      new_string.push_back(c);
     }
     return new_string;
   }
@@ -556,7 +635,12 @@ namespace Serialize{
     if (flag == SB_FLAG_STRING) {
       d += flag;
       d += "\"";
-      d += _add_escapes_to_string_readable(std::string((char*)(bloc->contents_native)));
+      std::vector<char> strval = std::vector<char>(bloc->span);
+      memcpy(strval.data(),bloc->contents_native,strval.size());
+      std::vector<char> nval = _add_escapes_to_string_readable(strval);
+      for(const char nc: nval){
+        d += nc;
+      }
       d += "\"";
     } else {      
       d += flag;
@@ -654,8 +738,9 @@ namespace Serialize{
     Readable::PushdownParser parser = Readable::PushdownParser();
 
     std::vector<char>::iterator it;
+    Readable::ParserState state = Readable::Warning;
     for (it = vdata.begin() + sidx; it != vdata.end(); ++it) {
-      Readable::ParserState state = parser.consume(*it);
+      state = parser.consume(*it);
       //      printf("%d \"%c\"\n",state,*it);
       if (state == Readable::Error)
         return false;
@@ -664,6 +749,9 @@ namespace Serialize{
       if (state == Readable::Success)
         break;
     }
+
+    if(state != Readable::Success)
+      return false;
 
     if(endidx != nullptr)
       *endidx =
@@ -720,7 +808,7 @@ namespace Serialize{
       return false;
     };
     std::vector<char> decoded = base64::decode(data);
-    return deserialize(&decoded, 0, nullptr);
+    return deserialize(decoded, 0, nullptr);
   }
   
   std::string CompoundNode::serialize_encode(){
@@ -733,8 +821,31 @@ namespace Serialize{
   }
   
   
-  bool CompoundNode::deserialize(std::vector<char>* data, un_size_t start_index, un_size_t* end_index){
-    if(data->size() == 0 || data->size() <= start_index) return false;
+  bool CompoundNode::deserialize(std::vector<char>& data, un_size_t start_index, un_size_t* end_index){
+    Binary::PushdownParser parser = Binary::PushdownParser();
+    
+    std::vector<char>::iterator it;
+    Binary::ParserState state = Binary::Warning;
+    for (it = data.begin() + start_index; it != data.end(); ++it) {
+      state = parser.consume(*it);
+      if (state == Binary::Error)
+        return false;
+      if (state == Binary::Success)
+        break;
+    }
+
+    if(state != Binary::Success)
+      return false;
+
+    if(end_index != nullptr)
+      *end_index = it - data.begin();
+
+    //    printf("parser node: %ld\n",parser.state.node);
+    //    printf("parser seri: %s\n",parser.state.node->serialize_readable(false).c_str());
+    destroy_children();
+    parser.merge_to(this);
+    return true;
+    /*    if(data->size() == 0 || data->size() <= start_index) return false;
     CompoundNode new_node;
     un_size_t index = start_index;
     un_size_t max_index = data->size() - 1;
@@ -801,7 +912,7 @@ namespace Serialize{
       *end_index = ++index;
     destroy_children();
     new_node.copy_to(this);
-    return true;
+    return true;*/
   }
 
   std::string _add_escapes_to_string(std::string str){
@@ -1091,7 +1202,7 @@ namespace Serialize{
     un_size_t span_d = little_endian<un_size_t>(span);
     contents.data()[0] = meta; //byte 1
     memcpy(contents.data()+sizeof(uint8_t),(char*)&element_d,sizeof(uint16_t)); //byte 2,3
-    memcpy(contents.data()+sizeof(uint8_t)+sizeof(uint16_t),(char*)&span_d,sizeof(un_size_t)); //bytes 3,4,5,6
+    memcpy(contents.data()+sizeof(uint8_t)+sizeof(uint16_t),(char*)&span_d,sizeof(un_size_t)); //bytes 3,4,5,6...
     void* contents_little_endian = contents_native;
     if(is_big_endian()){
       contents_little_endian = invert_endian_h(element_span, span/element_span, contents_native);
@@ -1108,6 +1219,8 @@ namespace Serialize{
     char* max = maxaddress + 1;
     if(max < data) return nullptr;
     if((uint64_t)(max - data) < sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t)) return nullptr;
+    meta = data[0];
+    //    printf("meta of new uppered node is :%d\n",meta);
     uint16_t element_size;
     memcpy(&element_size, data + sizeof(uint8_t), sizeof(uint16_t));
     element_span = little_endian<uint16_t>(element_size);// also goes from little to native
@@ -1125,7 +1238,6 @@ namespace Serialize{
       contents_native = malloc(span);
       memcpy(contents_native, data_after_header, span);
     }
-    meta = data[0];
     return data_after_header + span;
   }
 
@@ -1150,12 +1262,207 @@ namespace Serialize{
 
   #define PUSHDOWN_PARSER_TOKEN_WARNING_LENGTH_R 256
 
-  //Pushdown automaton parser
+  //Pushdown automaton parsers
+  namespace Binary{
+
+    ParserData fresh_parser_data_h();
+    void clean_parser_data(ParserData *);
+    
+    PushdownParser::PushdownParser(){state = fresh_parser_data_h();}
+
+    void PushdownParser::merge_to(CompoundNode* node){
+      state.node->copy_to(node);
+    }
+    
+    ParserState PushdownParser::consume(char c){
+      switch (state.current_state){
+
+      case AwaitNodeArrayNode:{
+        if(c == COMPOUND_NODE_END_LIST_FLAG){
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        break;
+      }
+
+      case AquireNodeData:{
+        state.node_data.push_back(c);
+        state.node_data_left--;
+        if(state.node_data_left <= 0){
+          if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
+            break;
+          SizedBlock* blk = new SizedBlock();
+          //          float f = 0.126;
+          //          SizedBlock* blk = new SizedBlock(sizeof(float),1,&f);
+          //          std::vector<char> l = blk->lower();
+          //          blk->upper(l,0);
+          blk->upper(state.node_data,0);
+          //          blk->assign_meta(SB_META_FLOAT_STYLE);
+          state.node->generic_tags[state.current_key] = blk;
+          for(char cd : state.node_data){
+            //            printf("%d,",cd);
+          }
+          //          printf("\nupper'd block: meta:%d element_size:%d span:%d\n",blk->meta,blk->element_span,blk->span);
+          //          state.node->put<float>("test",0.125)->assign_meta(SB_META_FLOAT_STYLE);
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        break;
+      }
+
+      case AquireNodeHeader:{
+        un_size_t headersize = SizedBlock::header_size_bytes();
+        state.node_data.push_back(c);
+        state.node_data_counter++;
+        if(state.node_data_counter < headersize - 1)
+          break;
+        if(state.node_data_counter == headersize - 1){
+          state.node_data_left = SizedBlock::interpret_size_from_header(state.node_data) + 1;
+          if(state.node_data_left == 0){
+            if(exists_key<SizedBlock*>(&(state.node->generic_tags),state.current_key))
+              break;
+            SizedBlock* nb = new SizedBlock();
+            nb->upper(state.node_data,0);
+            state.node->generic_tags[state.current_key] = nb;
+            state.current_state = AwaitKeyStart;
+            break;
+          }
+          state.current_state = AquireNodeData;
+          break;
+        }
+        state.current_state = Error;
+        break;
+      }
+
+      case GetIndicator:{
+        if(c == COMPOUND_NODE_BEGIN_BLOCK_FLAG){
+          state.current_state = AquireNodeHeader;
+          state.node_data.clear();
+          state.node_data_counter = 0;
+          state.node_data_left = 0;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state.current_state = AwaitKeyStart;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKeyStart;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_LIST_FLAG){
+          state.current_state = AwaitNodeArrayNode;
+          break;
+        }
+        break;
+      }
+
+      case ConstructKeyEscape:{
+        if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
+          state.current_string += c;
+          state.current_state = ConstructKey;
+          break;
+        }
+        state.current_string += COMPOUND_NODE_BEGIN_ELEMENT_FLAG;
+        state.current_string += c; 
+        state.current_state = ConstructKey;
+        break;
+      }
+
+      case ConstructKey:{
+        if(c == COMPOUND_NODE_ESCAPE_KEY_FLAG){
+          state.current_state = ConstructKeyEscape;
+          break;
+        }
+        if(c == COMPOUND_NODE_BEGIN_ELEMENT_FLAG){
+          state.current_key = state.current_string;
+          state.current_string = "";
+          state.current_state = GetIndicator;
+          break;
+        }
+        state.current_string += c;
+        break;
+      }
+
+      case AwaitKeyStart:{
+        if(c == COMPOUND_NODE_BEGIN_STRING_FLAG){
+          state.current_state = ConstructKey;
+          state.current_string = "";
+          break;
+        }
+        if(c == COMPOUND_NODE_END_FLAG){
+          if(state_stack.size() == 0){
+            state.current_state = Success;
+            break;
+          }
+          if(state_stack.size() >= 0){
+            ParserState top_state = state_stack.top().current_state;
+            std::string top_key = state_stack.top().current_key;
+            if(top_state == AwaitKeyStart){
+              state_stack.top().node->put(top_key, state.node);
+            } else if (top_state == AwaitNodeArrayNode){
+              state_stack.top().node->put_back(top_key, *state.node);
+            } else {
+              state.current_state = Error;
+              break;
+            }
+            //pop from stack, deleting dynamic objects in state
+            clean_parser_data(&state);
+            state = state_stack.top();
+            state_stack.pop();
+            break;
+          }
+          state.current_state = Error;
+        }
+        break;
+      }
+
+      case AwaitBegin:{
+        if(c == COMPOUND_NODE_BEGIN_FLAG){
+          state.current_state = AwaitKeyStart;
+        }
+        break;
+      }
+
+      default:{
+        state.current_state = Error;
+      }
+      }
+
+      return state.current_state;
+    };
+
+    ParserData fresh_parser_data_h() {
+      ParserData dat = ParserData{.node = new CompoundNode(), .current_state = AwaitBegin, .current_string = "", .current_key = "", .node_data = std::vector<char>(), .node_data_counter = 0, .node_data_left = 0};
+      //      printf("fresh parser data node = %ld\n",dat.node);
+      return dat;
+    }
+
+    void clean_parser_data(ParserData *data) {
+      delete data->node;
+      data->node = nullptr;
+    }
+
+   PushdownParser::~PushdownParser(){
+      clean_parser_data(&state);
+      state.node = NULL;
+      while (!state_stack.empty()) {
+        clean_parser_data(&state_stack.top());
+        state_stack.pop();
+      }
+    };
+  } //namespace Binary
+
+  
   namespace Readable {
     
     ParserState get_value_type_state(char c);
     bool is_appropriate_value_start(char c, char ident);
-
     ParserData fresh_parser_data_h();
     void clean_parser_data(ParserData *);
     ssize_t elem_size(char);
@@ -1165,11 +1472,45 @@ namespace Serialize{
 
       switch (state.current_state) {
 
-      // The user's program shoud pause parsing for a warning
-      // to prevent possible buffer overflow. The warning state
-      // is reached only through attempting to parse unreasonably
-      // long tokens. The previous state before the warning is
-      // stored in state.next_state
+      case PossibleCommentEnd: {
+	if (c == READABLE_COMMENT_CHECK){
+	  state.current_state = state.next_state;
+	} else {
+	  state.current_state = VariableComment;
+	}
+	break;
+      }
+	
+      case VariableComment: {
+	if (c == READABLE_COMMENT_VARIABLE_DELIM)
+	  state.current_state = PossibleCommentEnd;
+	break;
+      }
+	
+      case EndlineComment: {
+	if (c == READABLE_ENDLINE_DEFINITION)
+	  state.current_state = state.next_state;
+	break;
+      }
+	
+      case CheckComment: {
+	if (c == READABLE_ENDLINE_COMMENT_START){
+	  state.current_state = EndlineComment;
+	  break;
+	}
+	if (c == READABLE_COMMENT_VARIABLE_DELIM){
+	  state.current_state = VariableComment;
+	  break;
+	}
+	state.current_state = Error;
+	break;
+      }
+
+        // The user's program shoud pause parsing for a warning
+        // to prevent possible buffer overflow. The warning state
+        // is reached only through attempting to parse unreasonably
+        // long tokens. The previous state before the warning is
+        // stored in state.next_state
       case Warning: {
         state.current_state = Error;
       }
@@ -1180,7 +1521,6 @@ namespace Serialize{
           break;
         }
         if (c == COMPOUND_NODE_END_ARRAY_R) {
-          state.value_constructions.push_back(state.current_construction);
           state.current_construction = "";
           if (!parse_insert_generic(state.node, state.current_key,
                                     state.value_constructions,
@@ -1193,13 +1533,24 @@ namespace Serialize{
           state.value_constructions.clear();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c)) {
           state.current_state = Error;
           break;
         }
+        break;
       }
-        
+
       case ConstructValueParsable: {
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_END_ARRAY_R) {
           state.value_constructions.push_back(state.current_construction);
           state.current_construction = "";
@@ -1209,7 +1560,7 @@ namespace Serialize{
             state.current_state = Error;
             state.value_constructions.clear();
             break;
-           }
+          }
           state.current_state = AwaitItemSeperator;
           state.value_constructions.clear();
           break;
@@ -1251,6 +1602,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_ITEM_SEPERATOR_R) {
           state.current_state = Error;
           break;
@@ -1269,8 +1625,8 @@ namespace Serialize{
         }
         if (c == COMPOUND_NODE_END_STRING_R) {
           state.node->put_string<char>(
-              state.current_key, state.current_construction.size()+1,
-              (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
+                                       state.current_key, state.current_construction.size()+1,
+                                       (char *)state.current_construction.c_str())->assign_meta(SB_META_STRING);
           
           state.current_key = "";
           state.current_construction = "";
@@ -1306,6 +1662,11 @@ namespace Serialize{
           state.current_state = ConstructValueString;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1331,6 +1692,11 @@ namespace Serialize{
           state_stack.pop();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1346,6 +1712,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1357,6 +1728,11 @@ namespace Serialize{
           state.current_state = AwaitItemSeperator;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
           state.current_state = ConstructNodeArrayAwaitSeperator;
           state_stack.push(state);
@@ -1370,45 +1746,55 @@ namespace Serialize{
       }
 
       case AwaitValueTypeIdentifier: {
-       	  state.current_state = get_value_type_state(c);
-       	  if (state.current_state == Error)
-       	    break;
-       	  if (state.current_state == AwaitValue)
-       	    state.current_value_type = c;
-       	  if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
-       	    state.current_state = AwaitItemSeperator;
-       	    state_stack.push(state);
-       	    state = fresh_parser_data_h();
-       	    state.current_state = AwaitKey;
-       	    break;
-       	  }
-       	  if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
-       	    state.current_state = ConstructNodeArrayAwaitNode;
-       	    break;
-       	  }
-       	  break;
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
+        state.current_state = get_value_type_state(c);
+        if (state.current_state == Error)
+          break;
+        if (state.current_state == AwaitValue)
+          state.current_value_type = c;
+        if (c == COMPOUND_NODE_BEGIN_FLAG_R) {
+          state.current_state = AwaitItemSeperator;
+          state_stack.push(state);
+          state = fresh_parser_data_h();
+          state.current_state = AwaitKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_BEGIN_ARRAY_R) {
+          state.current_state = ConstructNodeArrayAwaitNode;
+          break;
+        }
+        break;
       }
        	  
       case AwaitKeyValueSeperator: {
-       	  if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
-       	    state.current_state = AwaitValueTypeIdentifier;
-       	    break;
-       	  }
-       	  if (!_is_ascii_whitespace(c))
-       	    state.current_state = Error;
-       	  break;
+        if (c == COMPOUND_NODE_KEY_VALUE_SEPERATOR) {
+          state.current_state = AwaitValueTypeIdentifier;
+          break;
+        }
+        if (c == READABLE_COMMENT_CHECK){
+          state.next_state = state.current_state;
+          state.current_state = CheckComment;
+          break;
+        }
+        if (!_is_ascii_whitespace(c))
+          state.current_state = Error;
+        break;
       }
        	  
       case ConstructKeyEscape: {
-       	  if (c == COMPOUND_NODE_END_STRING_R) {
-       	    state.current_construction += c;
-       	    state.current_state = ConstructKey;
-       	    break;
-       	  }
-       	  if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
-       	    state.current_construction += c;
-       	    break;
-       	  }
+        if (c == COMPOUND_NODE_END_STRING_R) {
+          state.current_construction += c;
+          state.current_state = ConstructKey;
+          break;
+        }
+        if (c == COMPOUND_NODE_ESCAPE_STRING_R) {
+          state.current_construction += c;
+          break;
+        }
         state.current_construction += COMPOUND_NODE_ESCAPE_STRING_R;
         state.current_construction += c;
         state.current_state = ConstructKey;
@@ -1452,6 +1838,11 @@ namespace Serialize{
           state_stack.pop();
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1462,6 +1853,11 @@ namespace Serialize{
           state.current_state = AwaitKey;
           break;
         }
+        if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
@@ -1696,7 +2092,6 @@ namespace Serialize{
   } // namespace Readable
 
 } // namespace Serialize
-
 
 #undef un_size_t
 #undef _return_if_EOF
