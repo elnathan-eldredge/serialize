@@ -31,9 +31,9 @@ Hashtable style serialization library
 	"floating point number" : f[1.5],
 	"an array of sixteen bit integers" : m[ 257, 258, 259],
 	/*comments*/ "another key" /*can*/ : /*be*/ b[ /*used*/ 1 /*between*/ , /*tokens*/2 ],
-	"keys reperesent the
+	"keys hold the
 	verbatim text except for \",
-        which is for quotes" : s"another value"
+        which is for quotes" : s"same with values"
 }
 
 ```
