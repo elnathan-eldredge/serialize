@@ -1511,6 +1511,7 @@ namespace Serialize{
         // is reached only through attempting to parse unreasonably
         // long tokens. The previous state before the warning is
         // stored in state.next_state
+
       case Warning: {
         state.current_state = Error;
       }
@@ -1533,6 +1534,7 @@ namespace Serialize{
           state.value_constructions.clear();
           break;
         }
+
         if (c == READABLE_COMMENT_CHECK){
 	  state.next_state = state.current_state;
 	  state.current_state = CheckComment;
@@ -1611,6 +1613,11 @@ namespace Serialize{
           state.current_state = Error;
           break;
         }
+	if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if (!_is_ascii_whitespace(c)) {
           state.current_state = ConstructValueParsable;
           state.current_construction += c;
@@ -1740,17 +1747,22 @@ namespace Serialize{
           state.current_state = AwaitKey;
           break;
         }
+	if (c == READABLE_COMMENT_CHECK){
+	  state.next_state = state.current_state;
+	  state.current_state = CheckComment;
+	  break;
+	}
         if(!_is_ascii_whitespace(c))
           state.current_state = Error;
         break;
       }
-
       case AwaitValueTypeIdentifier: {
         if (c == READABLE_COMMENT_CHECK){
 	  state.next_state = state.current_state;
 	  state.current_state = CheckComment;
 	  break;
 	}
+
         state.current_state = get_value_type_state(c);
         if (state.current_state == Error)
           break;
