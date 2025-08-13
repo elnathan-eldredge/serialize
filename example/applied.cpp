@@ -1,3 +1,4 @@
+#define SERIALIZE_IMPLEMENTATION
 #include "../include/serialize.hpp"
 #include <iostream>
 using namespace Serialize;

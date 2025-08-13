@@ -150,149 +150,29 @@ namespace Serialize{
 
     //this function is used to determine wether a string can be
     // successfully decoded
-    un_size_t diagnose(std::string data){
-      un_size_t idx;
-      for(char c : data){
-        ++idx;
-        if(!(detail::numtable[(size_t)c] + 1))
-          return idx;
-      }
-      return 0;
-    }
+    un_size_t diagnose(std::string data);
   
-    std::vector<char> decode(std::string data){ //will return an empty vector if error
-      std::vector<char> b64raw;
-      //    printf("size: %d, string: %s\n", data.size(), data.c_str());
-      if(data.size() % 4 != 0) return std::vector<char>();
-      b64raw.reserve(data.size());
-      char* dat = (char*)data.c_str();
-      for(un_size_t i = 0; i < data.size(); i++){
-        unsigned char ans = detail::numtable[(size_t)dat[i]];
-        //      printf("I: %d, %c\n", ans, data[i]);
-        if(ans == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
-        if(ans == (unsigned char)(255)){
-          //        printf("illegal char: %d, idx: %d\n", dat[i],i);
-          return std::vector<char>();
-        };
-        b64raw.push_back(ans);
-      }
-      b64raw.shrink_to_fit(); //we now have the array
-      un_size_t cur64idx = 0;
-      un_size_t nextemptyidx  = 0;
-      std::vector<char> output;
-      output.reserve((data.size()/4)*3); //the b64 array is a multiple of 4
-      for(unsigned char byte : b64raw){
-        if(byte == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
-        switch(cur64idx % 4){
-        case 0:
-          output.push_back(0);
-          output[nextemptyidx] |= (byte & detail::d1_1_mask) << detail::s1_1_rlshift;
-          nextemptyidx += 1;
-          break;
-        case 1:
-          output.push_back(0);
-          output[nextemptyidx - 1] |= (byte & detail::d2_1_mask) >> detail::s1_2_lrshift;
-          output[nextemptyidx] |= (byte & detail::d2_2_mask) << detail::s2_2_rlshift;
-          nextemptyidx += 1;
-          break;
-        case 2:
-          output.push_back(0);
-          output[nextemptyidx - 1] |= (byte & detail::d3_2_mask) >> detail::s2_3_lrshift;
-          output[nextemptyidx] |= (byte & detail::d3_3_mask) << detail::s3_3_rlshift;
-          nextemptyidx += 1;
-          break;
-        case 3:
-          output[nextemptyidx - 1] |= (byte & detail::d4_3_mask) >> detail::s3_4_lrshift;
-          break;
-        }
-        ++cur64idx;
-      }
-      output.shrink_to_fit();
-      return output;
-    }
+    std::vector<char> decode(std::string data);
 
-    std::string encode(std::vector<char> data){
-      un_size_t curbase256index = 0;
-      un_size_t nextemptybase64idx = 0;
-      std::vector<char> base64raw;
-      un_size_t num64bytes = ((data.size()+2)/3)*4; //the celing division of the size and 3, multiplied by 4
-      base64raw.resize(num64bytes);
-      memset(base64raw.data(), 0, num64bytes);
-      for(char sbyte : data){
-        unsigned char byte = (sbyte + 256) % 256;
-        switch (curbase256index % 3) {
-        case 0:
-          base64raw[nextemptybase64idx] |= ((byte & detail::m1_1_mask) >> detail::s1_1_rlshift);
-          base64raw[nextemptybase64idx + 1] |= ((byte & detail::m1_2_mask) << detail::s1_2_lrshift);
-          nextemptybase64idx += 2;
-          break;
-        case 1:
-          base64raw[nextemptybase64idx - 1] |= ((byte & detail::m2_2_mask) >> detail::s2_2_rlshift);
-          base64raw[nextemptybase64idx] |= ((byte & detail::m2_3_mask) << detail::s2_3_lrshift);
-          nextemptybase64idx += 1;
-          break;
-        case 2:
-          base64raw[nextemptybase64idx - 1] |= ((byte & detail::m3_3_mask) >> detail::s3_3_rlshift);
-          base64raw[nextemptybase64idx] |= ((byte & detail::m3_4_mask) << detail::s3_4_lrshift);
-          nextemptybase64idx += 1;
-          break;
-        }
-        ++curbase256index;
-      }
-      --nextemptybase64idx;
-      while(++nextemptybase64idx < num64bytes){
-        base64raw[nextemptybase64idx] = 64; //extra code for = character
-      }
-      std::string output;
-      output.reserve(num64bytes + 1);
-      for(char b64raw : base64raw){
-        output += detail::base64table[(b64raw+256)%256];
-        //      printf("%d, %d\n",detail::base64table[(b64raw+256)%256],b64raw);
-      }
-      return output;
-    }
+    std::string encode(std::vector<char> data);
   }
 }
 #endif
 
 namespace Serialize{
   
-  bool is_big_endian(void){
-    union {
-      uint32_t i;
-      char c[4];
-    } e = { 0x01000000 };
-    return e.c[0];
-  }
+  bool is_big_endian(void);
 
   //Inverts the endianness of data in an array
-  void* invert_endian_h(uint16_t element_size, un_size_t element_count, void* data_reg){
-    char* data_invert = (char*)malloc(element_size * element_count);
-    char* data = (char*)data_reg;
-    for(un_size_t i = 0; i < element_count * element_size; i += element_size){
-      for(uint16_t e = 0; e < element_size; e++){
-        data_invert[i + e] = data[i + (element_size - 1) - e];
-      }
-    }
-    return data_invert;
-  }
+  void* invert_endian_h(uint16_t element_size, un_size_t element_count, void* data_reg);
 
   //helper function because according to spec, the [] operator inserts an element
   template<typename T>
-  bool exists_key(std::unordered_map<std::string,T>* map, std::string key){
-    return map->find(key) != map->end();
-  }
+  bool exists_key(std::unordered_map<std::string,T>* map, std::string key);
 
   //force type T to be little endian
   template<typename T>
-  T little_endian(T d){
-    if(!is_big_endian()) return d;
-    T d_copp = d;
-    T* d_corr = (T*)invert_endian_h(sizeof(T), 1, &d_copp);
-    d_copp = *d_corr;
-    free(d_corr);
-    return d_copp;
-  }
+  T little_endian(T d);
 
   //This class is a fancy wrapper around
   // a basic array.
@@ -307,22 +187,11 @@ namespace Serialize{
 
     std::vector<char> lower();
 
-    static constexpr un_size_t header_size_bytes(){
-      return sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
-    }
+    static constexpr un_size_t header_size_bytes();
     
-    SizedBlock(){
-      span = 0;
-      element_span = 0;
-      contents_native = nullptr;
-    };
+    SizedBlock();
 
-    static un_size_t interpret_size_from_header(std::vector<char>& data){
-      un_size_t dsize_u;
-      memcpy(&dsize_u,((char*)data.data()) + sizeof(uint8_t) + sizeof(uint16_t),sizeof(un_size_t));
-      un_size_t total_span = little_endian<un_size_t>(dsize_u);
-      return total_span;
-    }
+    static un_size_t interpret_size_from_header(std::vector<char>& data);
 
     char* upper(char* data, char* max);
 
@@ -512,6 +381,8 @@ namespace Serialize{
     };    
   }
 
+#ifdef SERIALIZE_IMPLEMENTATION
+  
   bool CompoundNode::empty() {
     return child_nodes.empty() && generic_tags.empty() && child_node_lists.empty();
   }
@@ -2103,6 +1974,166 @@ namespace Serialize{
 
   } // namespace Readable
 
+  namespace base64{
+    un_size_t diagnose(std::string data){
+      un_size_t idx;
+      for(char c : data){
+        ++idx;
+        if(!(detail::numtable[(size_t)c] + 1))
+          return idx;
+      }
+      return 0;
+    }
+  
+    std::vector<char> decode(std::string data){ //will return an empty vector if error
+      std::vector<char> b64raw;
+      //    printf("size: %d, string: %s\n", data.size(), data.c_str());
+      if(data.size() % 4 != 0) return std::vector<char>();
+      b64raw.reserve(data.size());
+      char* dat = (char*)data.c_str();
+      for(un_size_t i = 0; i < data.size(); i++){
+        unsigned char ans = detail::numtable[(size_t)dat[i]];
+        //      printf("I: %d, %c\n", ans, data[i]);
+        if(ans == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
+        if(ans == (unsigned char)(255)){
+          //        printf("illegal char: %d, idx: %d\n", dat[i],i);
+          return std::vector<char>();
+        };
+        b64raw.push_back(ans);
+      }
+      b64raw.shrink_to_fit(); //we now have the array
+      un_size_t cur64idx = 0;
+      un_size_t nextemptyidx  = 0;
+      std::vector<char> output;
+      output.reserve((data.size()/4)*3); //the b64 array is a multiple of 4
+      for(unsigned char byte : b64raw){
+        if(byte == (unsigned char)(SRLS_EQ_ESCAPE_CODE)) break;
+        switch(cur64idx % 4){
+        case 0:
+          output.push_back(0);
+          output[nextemptyidx] |= (byte & detail::d1_1_mask) << detail::s1_1_rlshift;
+          nextemptyidx += 1;
+          break;
+        case 1:
+          output.push_back(0);
+          output[nextemptyidx - 1] |= (byte & detail::d2_1_mask) >> detail::s1_2_lrshift;
+          output[nextemptyidx] |= (byte & detail::d2_2_mask) << detail::s2_2_rlshift;
+          nextemptyidx += 1;
+          break;
+        case 2:
+          output.push_back(0);
+          output[nextemptyidx - 1] |= (byte & detail::d3_2_mask) >> detail::s2_3_lrshift;
+          output[nextemptyidx] |= (byte & detail::d3_3_mask) << detail::s3_3_rlshift;
+          nextemptyidx += 1;
+          break;
+        case 3:
+          output[nextemptyidx - 1] |= (byte & detail::d4_3_mask) >> detail::s3_4_lrshift;
+          break;
+        }
+        ++cur64idx;
+      }
+      output.shrink_to_fit();
+      return output;
+    }
+
+    std::string encode(std::vector<char> data){
+      un_size_t curbase256index = 0;
+      un_size_t nextemptybase64idx = 0;
+      std::vector<char> base64raw;
+      un_size_t num64bytes = ((data.size()+2)/3)*4; //the celing division of the size and 3, multiplied by 4
+      base64raw.resize(num64bytes);
+      memset(base64raw.data(), 0, num64bytes);
+      for(char sbyte : data){
+        unsigned char byte = (sbyte + 256) % 256;
+        switch (curbase256index % 3) {
+        case 0:
+          base64raw[nextemptybase64idx] |= ((byte & detail::m1_1_mask) >> detail::s1_1_rlshift);
+          base64raw[nextemptybase64idx + 1] |= ((byte & detail::m1_2_mask) << detail::s1_2_lrshift);
+          nextemptybase64idx += 2;
+          break;
+        case 1:
+          base64raw[nextemptybase64idx - 1] |= ((byte & detail::m2_2_mask) >> detail::s2_2_rlshift);
+          base64raw[nextemptybase64idx] |= ((byte & detail::m2_3_mask) << detail::s2_3_lrshift);
+          nextemptybase64idx += 1;
+          break;
+        case 2:
+          base64raw[nextemptybase64idx - 1] |= ((byte & detail::m3_3_mask) >> detail::s3_3_rlshift);
+          base64raw[nextemptybase64idx] |= ((byte & detail::m3_4_mask) << detail::s3_4_lrshift);
+          nextemptybase64idx += 1;
+          break;
+        }
+        ++curbase256index;
+      }
+      --nextemptybase64idx;
+      while(++nextemptybase64idx < num64bytes){
+        base64raw[nextemptybase64idx] = 64; //extra code for = character
+      }
+      std::string output;
+      output.reserve(num64bytes + 1);
+      for(char b64raw : base64raw){
+        output += detail::base64table[(b64raw+256)%256];
+        //      printf("%d, %d\n",detail::base64table[(b64raw+256)%256],b64raw);
+      }
+      return output;
+    }
+  } // namespace base64
+
+  bool is_big_endian(void){
+    union {
+      uint32_t i;
+      char c[4];
+    } e = { 0x01000000 };
+    return e.c[0];
+  }
+
+  //Inverts the endianness of data in an array
+  void* invert_endian_h(uint16_t element_size, un_size_t element_count, void* data_reg){
+    char* data_invert = (char*)malloc(element_size * element_count);
+    char* data = (char*)data_reg;
+    for(un_size_t i = 0; i < element_count * element_size; i += element_size){
+      for(uint16_t e = 0; e < element_size; e++){
+        data_invert[i + e] = data[i + (element_size - 1) - e];
+      }
+    }
+    return data_invert;
+  }
+
+  //helper function because according to spec, the [] operator inserts an element
+  template<typename T>
+  bool exists_key(std::unordered_map<std::string,T>* map, std::string key){
+    return map->find(key) != map->end();
+  }
+
+  //force type T to be little endian
+  template<typename T>
+  T little_endian(T d){
+    if(!is_big_endian()) return d;
+    T d_copp = d;
+    T* d_corr = (T*)invert_endian_h(sizeof(T), 1, &d_copp);
+    d_copp = *d_corr;
+    free(d_corr);
+    return d_copp;
+  }
+  
+  constexpr un_size_t SizedBlock::header_size_bytes(){
+    return sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
+  }
+    
+  SizedBlock::SizedBlock(){
+    span = 0;
+    element_span = 0;
+    contents_native = nullptr;
+  }
+
+  un_size_t SizedBlock::interpret_size_from_header(std::vector<char>& data){
+    un_size_t dsize_u;
+    memcpy(&dsize_u,((char*)data.data()) + sizeof(uint8_t) + sizeof(uint16_t),sizeof(un_size_t));
+    un_size_t total_span = little_endian<un_size_t>(dsize_u);
+    return total_span;
+  }
+  
+#endif //#ifdef SERIALIZE_IMPLEMENTATION
+  
 } // namespace Serialize
 
 #undef un_size_t
