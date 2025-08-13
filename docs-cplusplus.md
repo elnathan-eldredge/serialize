@@ -196,7 +196,7 @@ Returns a string-compatible serialization in base64 encoding.
 
 ---
 
-`bool decode_deserialize()`
+`bool decode_deserialize(std::string data)`
 
 Deserializes from a base64 encoded serialization.
 
