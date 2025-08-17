@@ -160,6 +160,7 @@ namespace Serialize{
 #endif
 
 namespace Serialize{
+
   
   bool is_big_endian(void);
 
@@ -381,8 +382,114 @@ namespace Serialize{
     };    
   }
 
-#ifdef SERIALIZE_IMPLEMENTATION
+  template<typename T>
+  std::vector<T> CompoundNode::get_string(std::string key){
+    T* ptr = (T*)generic_tags[key]->contents_native;
+    std::vector<T> string;
+    string.resize(generic_tags[key]->span/generic_tags[key]->element_span);
+    memcpy(string.data(), ptr, generic_tags[key]->span);
+    return string;
+  }
+
+  template<typename T>
+  T* CompoundNode::get_ref(std::string key){
+    T* ptr = (T*)generic_tags[key]->contents_native;
+    return ptr;
+  }
+
+  template<typename T>
+  T CompoundNode::get(std::string key){
+    T* ptr = (T*)generic_tags[key]->contents_native;
+    return *ptr;
+  }
+
+  template<typename T>
+  bool CompoundNode::has_compat_string(std::string key){
+    if(!exists_key<SizedBlock*>(&generic_tags, key))
+      return false;
+    return generic_tags[key]->element_span == sizeof(T);
+  }
   
+  template<typename T>
+  bool CompoundNode::has_compat(std::string key){
+    if(!exists_key<SizedBlock*>(&generic_tags, key))
+      return false;
+    return generic_tags[key]->span == sizeof(T);
+  }
+
+  template<typename T>
+  SizedBlock* CompoundNode::put_string(std::string key, std::vector<T>& vars){
+    T* p_vars = vars.data();
+    un_size_t amount = vars.size();
+    burninate_generic_if_exists(key);
+    SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
+    generic_tags[key] = ptr;
+    return ptr;
+  }
+
+  template<typename T>
+  SizedBlock* CompoundNode::put_string (std::string key, un_size_t amount, T* vars){
+    T* p_vars = vars;
+    burninate_generic_if_exists(key);
+    SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
+    generic_tags[key] = ptr;
+    return ptr;
+  }
+  
+  template<typename T>
+  SizedBlock* CompoundNode::put(std::string key, T var){
+    T var_copp = var;
+    burninate_generic_if_exists(key);
+    SizedBlock* ptr = new SizedBlock(sizeof(T), 1, &var_copp);
+    generic_tags[key] = ptr;
+    return ptr;
+  }
+
+  namespace Readable {
+
+    long long _safe_iparse(std::string str, bool *success);
+
+    long double _safe_fparse(std::string str, bool *success);
+    
+    template <typename T>
+    std::vector<T> _parse_ai(std::vector<std::string>& strings, bool *success) {
+      std::vector<T> parsed;
+      for (std::string parsable : strings) {
+        T num = (T)_safe_iparse(parsable, success);
+        if (!*success)
+          break;
+        parsed.push_back(num);
+      }
+      return parsed;
+    }
+
+    template <typename T>
+    std::vector<T> _parse_af(std::vector<std::string>& strings, bool *success) {
+      std::vector<T> parsed;
+      for (std::string parsable : strings) {
+        T num = (T)_safe_fparse(parsable, success);
+        if (!*success)
+          break;
+        parsed.push_back(num);
+      }
+      return parsed;
+    }
+    
+  }
+
+  template<typename T>
+  T little_endian(T d){
+    if(!is_big_endian()) return d;
+    T d_copp = d;
+    T* d_corr = (T*)invert_endian_h(sizeof(T), 1, &d_copp);
+    d_copp = *d_corr;
+    free(d_corr);
+    return d_copp;
+  }
+}
+#ifdef SERIALIZE_IMPLEMENTATION
+
+namespace Serialize{ 
   bool CompoundNode::empty() {
     return child_nodes.empty() && generic_tags.empty() && child_node_lists.empty();
   }
@@ -892,29 +999,8 @@ namespace Serialize{
     return child_node_lists[key].size();
   }
 
-  template<typename T>
-  std::vector<T> CompoundNode::get_string(std::string key){
-    T* ptr = (T*)generic_tags[key]->contents_native;
-    std::vector<T> string;
-    string.resize(generic_tags[key]->span/generic_tags[key]->element_span);
-    memcpy(string.data(), ptr, generic_tags[key]->span);
-    return string;
-  }
-
   un_size_t CompoundNode::get_string_length(std::string key){
     return generic_tags[key]->span/generic_tags[key]->element_span;
-  }
-
-  template<typename T>
-  T* CompoundNode::get_ref(std::string key){
-    T* ptr = (T*)generic_tags[key]->contents_native;
-    return ptr;
-  }
-  
-  template<typename T>
-  T CompoundNode::get(std::string key){
-    T* ptr = (T*)generic_tags[key]->contents_native;
-    return *ptr;
   }
 
   bool CompoundNode::has_node_list(std::string key){
@@ -923,20 +1009,6 @@ namespace Serialize{
 
   bool CompoundNode::has_node(std::string key){
     return exists_key<CompoundNode*>(&child_nodes, key);
-  }
-
-  template<typename T>
-  bool CompoundNode::has_compat_string(std::string key){
-    if(!exists_key<SizedBlock*>(&generic_tags, key))
-      return false;
-    return generic_tags[key]->element_span == sizeof(T);
-  }
-  
-  template<typename T>
-  bool CompoundNode::has_compat(std::string key){
-    if(!exists_key<SizedBlock*>(&generic_tags, key))
-      return false;
-    return generic_tags[key]->span == sizeof(T);
   }
 
   void CompoundNode::put(std::string key, std::vector<CompoundNode*>& nodes){
@@ -1012,34 +1084,6 @@ namespace Serialize{
        delete pair.second;
     }
     generic_tags = std::unordered_map<std::string, SizedBlock*>();
-  }
-
-  template<typename T>
-  SizedBlock* CompoundNode::put_string(std::string key, std::vector<T>& vars){
-    T* p_vars = vars.data();
-    un_size_t amount = vars.size();
-    burninate_generic_if_exists(key);
-    SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
-    generic_tags[key] = ptr;
-    return ptr;
-  }
-
-  template<typename T>
-  SizedBlock* CompoundNode::put_string (std::string key, un_size_t amount, T* vars){
-    T* p_vars = vars;
-    burninate_generic_if_exists(key);
-    SizedBlock* ptr = new SizedBlock(sizeof(T), amount, p_vars);
-    generic_tags[key] = ptr;
-    return ptr;
-  }
-  
-  template<typename T>
-  SizedBlock* CompoundNode::put(std::string key, T var){
-    T var_copp = var;
-    burninate_generic_if_exists(key);
-    SizedBlock* ptr = new SizedBlock(sizeof(T), 1, &var_copp);
-    generic_tags[key] = ptr;
-    return ptr;
   }
 
   void CompoundNode::burninate_generic_if_exists(std::string key){
@@ -1806,54 +1850,6 @@ namespace Serialize{
       return -1;
     }
 
-    long long _safe_iparse(std::string str, bool *success) {
-      long long num;
-      try {
-        num = std::stoll(str);
-      } catch (std::exception& e) {
-        *success = false;
-        return 0;
-      }
-      *success = true;
-      return num;
-    }
-
-    long double _safe_fparse(std::string str, bool *success) {
-      long double num;
-      try {
-        num = std::stold(str);
-      } catch (std::exception& e) {
-        *success = false;
-        return 0;
-      }
-      *success = true;
-      return num;
-    }
-
-    template <typename T>
-    std::vector<T> _parse_ai(std::vector<std::string>& strings, bool *success) {
-      std::vector<T> parsed;
-      for (std::string parsable : strings) {
-        T num = (T)_safe_iparse(parsable, success);
-        if (!*success)
-          break;
-        parsed.push_back(num);
-      }
-      return parsed;
-    }
-
-    template <typename T>
-    std::vector<T> _parse_af(std::vector<std::string>& strings, bool *success) {
-      std::vector<T> parsed;
-      for (std::string parsable : strings) {
-        T num = (T)_safe_fparse(parsable, success);
-        if (!*success)
-          break;
-        parsed.push_back(num);
-      }
-      return parsed;
-    }
-
     bool parse_insert_generic(CompoundNode *node, std::string key,
                               std::vector<std::string> raw, char parse_type) {
       switch (parse_type){
@@ -1970,6 +1966,30 @@ namespace Serialize{
       if ((ident == SB_FLAG_STRING) && c == COMPOUND_NODE_BEGIN_STRING_R)
         return true;
       return false;
+    }
+
+    long long _safe_iparse(std::string str, bool *success) {
+      long long num;
+      try {
+        num = std::stoll(str);
+      } catch (std::exception& e) {
+        *success = false;
+        return 0;
+      }
+      *success = true;
+      return num;
+    }
+
+    long double _safe_fparse(std::string str, bool *success) {
+      long double num;
+      try {
+        num = std::stold(str);
+      } catch (std::exception& e) {
+        *success = false;
+        return 0;
+      }
+      *success = true;
+      return num;
     }
 
   } // namespace Readable
@@ -2105,15 +2125,6 @@ namespace Serialize{
   }
 
   //force type T to be little endian
-  template<typename T>
-  T little_endian(T d){
-    if(!is_big_endian()) return d;
-    T d_copp = d;
-    T* d_corr = (T*)invert_endian_h(sizeof(T), 1, &d_copp);
-    d_copp = *d_corr;
-    free(d_corr);
-    return d_copp;
-  }
   
   constexpr un_size_t SizedBlock::header_size_bytes(){
     return sizeof(uint8_t) + sizeof(uint16_t) + sizeof(un_size_t);
@@ -2132,11 +2143,11 @@ namespace Serialize{
     return total_span;
   }
   
-#endif //#ifdef SERIALIZE_IMPLEMENTATION
-  
 } // namespace Serialize
+#endif //#ifdef SERIALIZE_IMPLEMENTATION
 
 #undef un_size_t
 #undef _return_if_EOF
 #undef _rassert_token
 #undef bp
+
