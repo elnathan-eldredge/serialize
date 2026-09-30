@@ -78,7 +78,7 @@ Insert a copy of the vector of the nodes as a child array.
 
 ---
 
-`SizedBlock* put_back(std::string key, CompoundNode& node)`
+`void put_back(std::string key, CompoundNode& node)`
 
 Append a copy of the given node to the child array.
 
@@ -196,7 +196,7 @@ Returns a string-compatible serialization in base64 encoding.
 
 ---
 
-`bool decode_deserialize()`
+`bool decode_deserialize(std::string data)`
 
 Deserializes from a base64 encoded serialization.
 

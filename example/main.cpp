@@ -1,3 +1,4 @@
+#define SERIALIZE_IMPLEMENTATION
 #include "../include/serialize.hpp"
 #include <iostream>
 
@@ -166,10 +167,10 @@ int main(){
   }
 
   node.destroy_children();
-  
+
   std::string invalid_code = "{\r\n"
    "\"incomplete\" : n";
-
+  
   printf("About to decode invalid code\n\n");
   
   node.destroy_children();
@@ -234,5 +235,6 @@ int main(){
   ssr = node.deserialize_readable(sr);
   printf("end result:%s\n",node.serialize_readable(true).c_str());
   printf("deserialize results (all should pass):%s,%s,%s\n\n",ssb?"pass":"fail",sse?"pass":"fail",ssr?"pass":"fail");  
+
   return 0;
 }
