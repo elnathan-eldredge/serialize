@@ -46,6 +46,7 @@ May 27, 2024
 #include <algorithm>
 #include <string>
 #include <stack>
+#include <fstream>
 #include <string.h>
 
 #define EE_Serialize
@@ -284,6 +285,51 @@ namespace Serialize{
     void destroy_children();
   };
 
+  // A more sleek mapping-based parsing object
+  //
+  // This type of factory that seems to be popular: 
+  //
+  // NodeMapperResult* _ = NodeMapper().map(...)
+  //    ->map(...)
+  //    ->map(...)
+  //    ->submap(nodename)
+  //      ->map(...)
+  //      ->map(...)
+  //      ->end_submap()
+  //    ->parse(file/string/stream);
+  
+  class NodeMapper {
+    CompoundNode node = CompoundNode();
+    NodeMapper* parent = nullptr;
+    std::vector<std::string> failed_tags;
+    std::unordered_map<std::string, NodeMapper*> submappings; //heap
+  public:
+    
+    NodeMapper();
+    NodeMapper(NodeMapper*);
+
+    template<typename T> NodeMapper* map1(std::string tagname, T* var);
+    template<typename T> NodeMapper* mapn(std::string tagname, std::vector<T>* vector);
+    NodeMapper* mapstr(std::string tagname, std::string* vector);
+
+    NodeMapper* submap(std::string nodename);
+    NodeMapper* end_submap();
+
+    std::vector<std::string>& get_failed_tags();
+    void _add_failed_tag(std::string);
+    void clear_failed_tags();
+
+    bool map_node(CompoundNode& node);
+    bool parse_readable(std::string& data);
+    bool parse_binary(std::vector<char>& data);
+    bool parse_encoded(std::string& data);
+    bool parse_readable_file(std::string& filename);
+    bool parse_binary_file(std::string& filename);
+    bool parse_encoded_file(std::string& filename);
+    ~NodeMapper();
+  };
+  
+
   namespace Binary {
     class PushdownParser;
 
@@ -445,6 +491,24 @@ namespace Serialize{
     return ptr;
   }
 
+  template<typename T> NodeMapper* NodeMapper::map1(std::string tagname, T* var){
+    if(!node.has_compat<T>(tagname)){
+      failed_tags.push_back(tagname);
+      return this;
+    }
+    *var = node.get<T>(tagname);
+    return this;
+  }
+
+  template<typename T> NodeMapper* NodeMapper::mapn(std::string tagname, std::vector<T>* vec){
+    if(!node.has_compat_string<T>(tagname)){
+      failed_tags.push_back(tagname);
+      return this;
+    }
+    *vec = node.get_string<T>(tagname);
+    return this;
+  }
+
   namespace Readable {
 
     long long _safe_iparse(std::string str, bool *success);
@@ -489,7 +553,7 @@ namespace Serialize{
 }
 #ifdef SERIALIZE_IMPLEMENTATION
 
-namespace Serialize{ 
+namespace Serialize{
   bool CompoundNode::empty() {
     return child_nodes.empty() && generic_tags.empty() && child_node_lists.empty();
   }
@@ -1175,6 +1239,112 @@ namespace Serialize{
 
   SizedBlock::~SizedBlock() { dump(); }
 
+  
+  NodeMapper::NodeMapper(){}
+  NodeMapper::NodeMapper(NodeMapper* p){
+    parent = p;
+  }
+  NodeMapper::~NodeMapper(){
+    for(std::pair<std::string, NodeMapper*> mapping: submappings){
+      if(mapping.second){
+	delete mapping.second;
+	submappings[mapping.first] = nullptr;
+      }
+    }
+  }
+
+  std::vector<std::string>& NodeMapper::get_failed_tags(){
+    return failed_tags;
+  }
+
+  void NodeMapper::clear_failed_tags(){
+    failed_tags.clear();
+  }
+
+  NodeMapper* NodeMapper::mapstr(std::string tagname, std::string* str){
+    if(!node.has_compat_string<char>(tagname)){
+      failed_tags.push_back(tagname);
+      return this;
+    }
+    *str = std::string((const char*)node.get_ref<char>(tagname),(size_t)node.get_string_length(tagname));
+    return this;
+  }
+
+  NodeMapper* NodeMapper::submap(std::string nodename){
+    NodeMapper* subnode = new NodeMapper(this);
+    if(!node.has_node(nodename)){
+      failed_tags.push_back(nodename);
+    } else {
+      subnode->map_node(*node.get_node(nodename));
+    }
+    return subnode;
+  }
+
+  void NodeMapper::_add_failed_tag(std::string tag){
+    failed_tags.push_back(tag);
+  }
+
+  NodeMapper* NodeMapper::end_submap(){
+    if(parent == nullptr) return this;
+    for(std::string failure: failed_tags)
+      parent->_add_failed_tag(std::string("<subnode>/")+failure);
+    return parent;
+  }
+
+  bool NodeMapper::map_node(CompoundNode& nnode){
+    nnode.copy_to(&node);
+    return true;
+  }
+
+  bool NodeMapper::parse_readable(std::string& data){
+    if(!node.deserialize_readable(data))
+      return false;
+    return true;
+  }
+
+  bool NodeMapper::parse_encoded(std::string& data){
+    if(!node.decode_deserialize(data))
+      return false;
+    return true;
+  }
+
+  bool NodeMapper::parse_binary(std::vector<char>& data){
+    un_size_t end = 0;
+    if(!node.deserialize(data, 0, &end))
+      return false;
+    return true;
+  }
+
+  bool NodeMapper::parse_readable_file(std::string& fn){
+    std::fstream file = std::fstream(fn, std::ios::in);
+    if(!file.is_open())
+      return false;
+    std::string s;
+    file >> s;
+    return parse_readable(s);
+  }
+
+  bool NodeMapper::parse_encoded_file(std::string& fn){
+    std::fstream file = std::fstream(fn, std::ios::in);
+    if(!file.is_open())
+      return false;
+    std::string s;
+    file >> s;
+    return parse_encoded(s);
+  }
+
+  bool NodeMapper::parse_binary_file(std::string& fn){
+    std::fstream file = std::fstream(fn, std::ios::in | std::ios::ate | std::ios::binary);
+    if(!file.is_open())
+      return false;
+    size_t len = file.tellg();
+    file.clear();
+    file.seekg(0); // rewind
+    std::vector<char> v; v.resize(len);
+    file.read(v.data(),v.size());
+    return parse_binary(v);
+  }
+  
   #define PUSHDOWN_PARSER_TOKEN_WARNING_LENGTH_R 256
 
   //Pushdown automaton parsers
