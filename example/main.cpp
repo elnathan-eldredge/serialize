@@ -245,7 +245,8 @@ int main(){
   std::string submaptomestr = "This subvalue has not been mapped to";
 
   Serialize::NodeMapper mapper = Serialize::NodeMapper();
-  // Mapping without a valid tag does not write to the value
+  
+  // Trying to map without the appropriate tags parsed
   mapper.mapstr("key",&maptomestr)->
     mapn<uint16_t>("an array of sixteen bit integers", &vec_o_numbers)->
     submap("subtag")->
@@ -255,13 +256,16 @@ int main(){
   
   std::cout << "mapping with no valid tags\n" << maptomestr << "\n" << (int)number8 << "\n" << *(vec_o_numbers.end()-1) << "\n" << submaptomestr << "\n\n";
 
-  std::cout << "failed tags:\n";
-  for(std::string& failure: mapper.get_failed_tags()){
-    std::cout << " " << failure << "\n";
+  if(!mapper.get_failed_tags().empty()){
+    std::cout << "looks like the mapper had some failed tags...:\n";
+    for(std::string& failure: mapper.get_failed_tags()){
+      std::cout << " " << failure << "\n";
+    }
   }
 
   std::cout << "\n";
-    
+
+  // Actually parse the tags then map
   if(mapper.parse_readable(comment_test)){
     mapper.mapstr("key",&maptomestr)->
       mapn<uint16_t>("an array of sixteen bit integers", &vec_o_numbers)->
