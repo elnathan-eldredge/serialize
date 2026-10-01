@@ -156,7 +156,8 @@ int main(){
 	/*comments*/ "another key" /*can*/ : /*be*/ b[ /*used*/ 1 /*between*/ , /*tokens*/2 ],
 	"keys reperesent the
 	verbatim text except for \",
-        which is for quotes" : s"another value"
+        which is for quotes" : s"another value",
+        "subtag": { "key": s"a second value" }
 }
 )x";
 
@@ -236,5 +237,41 @@ int main(){
   printf("end result:%s\n",node.serialize_readable(true).c_str());
   printf("deserialize results (all should pass):%s,%s,%s\n\n",ssb?"pass":"fail",sse?"pass":"fail",ssr?"pass":"fail");  
 
+
+  std::cout << "#####\nMapping Tests\n#####\n\n";
+  std::string maptomestr = "This value has not been mapped to.";
+  uint8_t number8 = 5;
+  std::vector<uint16_t> vec_o_numbers = {3};
+  std::string submaptomestr = "This subvalue has not been mapped to";
+
+  Serialize::NodeMapper mapper = Serialize::NodeMapper();
+  // Mapping without a valid tag does not write to the value
+  mapper.mapstr("key",&maptomestr)->
+    mapn<uint16_t>("an array of sixteen bit integers", &vec_o_numbers)->
+    submap("subtag")->
+      mapstr("key",&submaptomestr)->
+      end_submap()->
+    map1<uint8_t>("eight bit integer",&number8);
+  
+  std::cout << "mapping with no valid tags\n" << maptomestr << "\n" << (int)number8 << "\n" << *(vec_o_numbers.end()-1) << "\n" << submaptomestr << "\n\n";
+
+  std::cout << "failed tags:\n";
+  for(std::string& failure: mapper.get_failed_tags()){
+    std::cout << " " << failure << "\n";
+  }
+
+  std::cout << "\n";
+    
+  if(mapper.parse_readable(comment_test)){
+    mapper.mapstr("key",&maptomestr)->
+      mapn<uint16_t>("an array of sixteen bit integers", &vec_o_numbers)->
+      submap("subtag")->
+        mapstr("key",&submaptomestr)->
+        end_submap()->
+      map1<uint8_t>("eight bit integer",&number8);
+
+    std::cout << "mapping with with valid tags\n" << maptomestr << "\n" << (int)number8 << "\n" << *(vec_o_numbers.end()-1) << "\n" << submaptomestr << "\n\n";   
+  }
+  
   return 0;
 }
