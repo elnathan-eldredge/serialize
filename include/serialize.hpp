@@ -302,7 +302,7 @@ namespace Serialize{
     CompoundNode node = CompoundNode();
     NodeMapper* parent = nullptr;
     std::vector<std::string> failed_tags;
-    std::unordered_map<std::string, NodeMapper*> submappings; //heap
+    NodeMapper* current_submap = nullptr;
   public:
     
     NodeMapper();
@@ -1245,12 +1245,8 @@ namespace Serialize{
     parent = p;
   }
   NodeMapper::~NodeMapper(){
-    for(std::pair<std::string, NodeMapper*> mapping: submappings){
-      if(mapping.second){
-	delete mapping.second;
-	submappings[mapping.first] = nullptr;
-      }
-    }
+    if(current_submap) delete current_submap;
+    current_submap = nullptr;
   }
 
   std::vector<std::string>& NodeMapper::get_failed_tags(){
@@ -1271,13 +1267,15 @@ namespace Serialize{
   }
 
   NodeMapper* NodeMapper::submap(std::string nodename){
-    NodeMapper* subnode = new NodeMapper(this);
+    if(current_submap) delete current_submap;
+    current_submap = nullptr;
+    current_submap = new NodeMapper(this);
     if(!node.has_node(nodename)){
       failed_tags.push_back(nodename);
     } else {
-      subnode->map_node(*node.get_node(nodename));
+      current_submap->map_node(*node.get_node(nodename));
     }
-    return subnode;
+    return current_submap;
   }
 
   void NodeMapper::_add_failed_tag(std::string tag){
